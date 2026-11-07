@@ -1,0 +1,7 @@
+flask>=3.0
+flask-cors>=5.0
+python-dotenv>=1.0
+firebase-admin>=6.5
+google-genai>=1.0
+assemblyai>=0.30
+pytest>=8.0

@@ -1,0 +1,15 @@
+# Python
+server/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets
+.env
+*.local
+serviceAccount*.json
+
+# PlatformIO
+firmware/.pio/
+
+.DS_Store
