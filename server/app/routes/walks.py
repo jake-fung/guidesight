@@ -10,6 +10,8 @@ from ..store import get_store
 
 bp = Blueprint("walks", __name__)
 
+HARNESS_EVENT_TYPES = ("stop", "pull", "obstacle")
+
 
 def _walk_or_404(walk_id):
     walk = get_store().get_walk(g.uid, walk_id)
@@ -41,11 +43,14 @@ def get_walk(walk_id):
 @bp.post("/<walk_id>/harness-event")
 @require_auth
 def harness_event(walk_id):
-    """Relayed from the ESP32 over BLE: {type: "stop"|"pull", motion: {...}, location: {lat, lng}}."""
+    """Relayed from the harness over BLE: {type: "stop"|"pull"|"obstacle", motion: {...}, location}.
+
+    stop/pull come from the ESP32 MPU6050; obstacle ({cm}) comes from the UNO R4 HC-SR04.
+    """
     _walk_or_404(walk_id)
     body = request.get_json(force=True)
-    if body.get("type") not in ("stop", "pull"):
-        abort(400, description="type must be 'stop' or 'pull'")
+    if body.get("type") not in HARNESS_EVENT_TYPES:
+        abort(400, description="type must be 'stop', 'pull' or 'obstacle'")
     event = get_store().add_event(g.uid, walk_id, {
         "type": body["type"],
         "motion": body.get("motion"),
@@ -59,7 +64,7 @@ def harness_event(walk_id):
 @bp.post("/<walk_id>/frame")
 @require_auth
 def frame(walk_id):
-    """{image: <base64 jpeg>, trigger: "stop"|"pull"|"periodic"|"manual", location} -> spoken alert."""
+    """{image: <base64 jpeg>, trigger: "stop"|"pull"|"obstacle"|"periodic"|"manual", location} -> spoken alert."""
     _walk_or_404(walk_id)
     body = request.get_json(force=True)
     try:

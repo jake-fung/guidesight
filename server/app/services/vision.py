@@ -4,7 +4,7 @@ import json
 from ..config import Config
 
 SCENE_PROMPT = """You are the eyes of a blind pedestrian walking with a guide dog.
-The dog just {trigger}. Look at this street-level photo from their chest-mounted phone.
+What just happened: {trigger}. Look at this street-level photo from their chest-mounted phone.
 Return JSON with:
   "alert":     one short spoken warning, max 8 words, most urgent thing first (e.g. "Curb ahead, step down")
   "detail":    one or two sentences describing the scene for a follow-up
@@ -18,10 +18,11 @@ Answer in one or two short spoken sentences using only what is visible in this p
 If you cannot tell, say so plainly. Return JSON: {{"answer": "..."}}"""
 
 TRIGGER_TEXT = {
-    "stop": "stopped",
-    "pull": "pulled sharply",
-    "periodic": "is walking normally (routine check)",
-    "manual": "was asked to describe the surroundings",
+    "stop": "the guide dog stopped",
+    "pull": "the guide dog pulled sharply",
+    "obstacle": "an ultrasonic sensor detected something close ahead; identify it first",
+    "periodic": "they are walking normally (routine check)",
+    "manual": "they asked for a description of the surroundings",
 }
 
 _client = None

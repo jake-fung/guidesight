@@ -33,7 +33,7 @@ export default function WalkScreen() {
   const [lastAlert, setLastAlert] = useState('Starting walk…');
 
   /** Grab a frame and ask the server what's ahead. Skips if a frame is already in flight. */
-  const describe = useCallback(async (trigger: 'stop' | 'pull' | 'periodic' | 'manual') => {
+  const describe = useCallback(async (trigger: 'stop' | 'pull' | 'obstacle' | 'periodic' | 'manual') => {
     if (!walkId.current || !camera.current || frameInFlight.current) return;
     frameInFlight.current = true;
     try {
@@ -54,7 +54,8 @@ export default function WalkScreen() {
     let locationSub: Location.LocationSubscription | undefined;
     const harnessSub = onHarnessEvent(async (e) => {
       if (!walkId.current) return;
-      const res = await api.harnessEvent(walkId.current, e.type, { accel: e.accel }, location.current);
+      const motion = e.type === 'obstacle' ? { cm: e.cm } : { accel: e.accel };
+      const res = await api.harnessEvent(walkId.current, e.type, motion, location.current);
       if (res.capture_frame) describe(e.type);
     });
     const timer = setInterval(() => describe('periodic'), PERIODIC_FRAME_MS);

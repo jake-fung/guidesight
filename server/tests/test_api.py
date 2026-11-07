@@ -60,3 +60,14 @@ def test_dev_seed_feeds_dashboard(client):
     client.post("/api/dev/seed", headers=AUTH)
     summary = client.get("/api/dashboard/summary", headers=AUTH).get_json()
     assert len(summary["walks"]) == 5 and summary["stops"] and summary["hotspots"]
+
+
+def test_obstacle_event_from_ultrasonic_harness(client):
+    wid = client.post("/api/walks", headers=AUTH).get_json()["id"]
+    r = client.post(f"/api/walks/{wid}/harness-event", headers=AUTH,
+                    json={"type": "obstacle", "motion": {"cm": 85}})
+    assert r.status_code == 201 and r.get_json()["capture_frame"] is True
+
+    r = client.post(f"/api/walks/{wid}/frame", headers=AUTH,
+                    json={"image": JPEG, "trigger": "obstacle"})
+    assert r.get_json()["alert"]["speak"]

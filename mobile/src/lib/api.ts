@@ -40,7 +40,7 @@ export const api = {
   startWalk: () => post<{ id: string }>('/walks'),
   endWalk: (walkId: string) => post(`/walks/${walkId}/end`),
 
-  harnessEvent: (walkId: string, type: 'stop' | 'pull', motion: object, location?: LatLng) =>
+  harnessEvent: (walkId: string, type: 'stop' | 'pull' | 'obstacle', motion: object, location?: LatLng) =>
     post<{ capture_frame: boolean }>(`/walks/${walkId}/harness-event`, { type, motion, location }),
 
   sendFrame: (walkId: string, imageBase64: string, trigger: string, location?: LatLng) =>
