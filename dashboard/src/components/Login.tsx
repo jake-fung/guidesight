@@ -1,39 +1,36 @@
-import { useState, type FormEvent } from 'react'
-import { login, register } from '../lib/auth'
+import { useState } from 'react'
+import { getAuthError, login, register } from '../lib/auth'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(getAuthError)
+  const [busy, setBusy] = useState(false)
 
-  async function submit(e: FormEvent, action = login) {
-    e.preventDefault()
+  async function go(action: typeof login) {
+    setBusy(true)
     setError(null)
     try {
-      await action(email.trim(), password)
+      await action() // leaves the page for Auth0's sign-in page
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : 'Sign-in failed')
+      setBusy(false)
     }
   }
 
   return (
     <main className="grid min-h-dvh place-items-center bg-zinc-950 px-4 text-zinc-100">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-8">
-        <h1 className="text-2xl font-bold">GuideSight</h1>
-        <p className="text-sm text-zinc-400">Sign in to start a walk or review past walks.</p>
-        <input className="w-full rounded-lg bg-zinc-800 px-4 py-3" type="email" placeholder="Email" autoComplete="email"
-          value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input className="w-full rounded-lg bg-zinc-800 px-4 py-3" type="password" placeholder="Password" autoComplete="current-password"
-          value={password} onChange={(e) => setPassword(e.target.value)} required />
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <button className="w-full rounded-lg bg-amber-400 py-3 font-semibold text-zinc-950 hover:bg-amber-300">
+      <div className="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-8">
+        <h1 className="text-3xl font-bold">GuideSight</h1>
+        <p className="text-lg text-zinc-300">Sign in to start a walk or review past walks.</p>
+        {error && <p className="text-red-400" role="alert">{error}</p>}
+        <button type="button" disabled={busy} onClick={() => go(login)}
+          className="min-h-14 w-full rounded-xl bg-amber-400 text-xl font-bold text-zinc-950 hover:bg-amber-300 disabled:opacity-50">
           Sign in
         </button>
-        <button type="button" onClick={(e) => submit(e, register)}
-          className="w-full rounded-lg bg-zinc-800 py-3 font-semibold hover:bg-zinc-700">
+        <button type="button" disabled={busy} onClick={() => go(register)}
+          className="min-h-14 w-full rounded-xl bg-zinc-800 text-xl font-bold hover:bg-zinc-700 disabled:opacity-50">
           Create account
         </button>
-      </form>
+      </div>
     </main>
   )
 }

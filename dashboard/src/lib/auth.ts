@@ -1,42 +1,79 @@
-import { initializeApp } from 'firebase/app'
-import {
-  createUserWithEmailAndPassword,
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  type User,
-} from 'firebase/auth'
+/**
+ * Auth0 login. Sign-in and sign-up happen on Auth0's hosted page (where passkeys can be turned on),
+ * then Auth0 redirects back here. The server checks the access token (server/app/auth.py).
+ */
+import { Auth0Client } from '@auth0/auth0-spa-js'
 import { useEffect, useState } from 'react'
 
-const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? '',
+const domain = import.meta.env.VITE_AUTH0_DOMAIN ?? ''
+const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID ?? ''
+const audience = import.meta.env.VITE_AUTH0_AUDIENCE ?? ''
+
+/** No Auth0 config -> dev mode against the mock-mode Flask server. */
+export const DEV_MODE = !domain
+
+const client = DEV_MODE
+  ? null
+  : new Auth0Client({
+      domain,
+      clientId,
+      authorizationParams: { audience, redirect_uri: window.location.origin },
+      // Refresh tokens in localStorage keep people signed in on Safari, which blocks the
+      // cookie-based silent login. Needs Refresh Token Rotation on in the Auth0 app settings.
+      useRefreshTokens: true,
+      cacheLocation: 'localstorage',
+    })
+
+type AppState = { returnTo?: string }
+let authError: string | null = null
+
+/** Finishes a login redirect if this page load is one, then reports whether someone is signed in. */
+async function init(c: Auth0Client): Promise<boolean> {
+  const params = new URLSearchParams(window.location.search)
+  if (params.has('state') && (params.has('code') || params.has('error'))) {
+    try {
+      const { appState } = await c.handleRedirectCallback<AppState>()
+      window.history.replaceState(null, '', appState?.returnTo ?? '/')
+    } catch (e) {
+      authError = e instanceof Error ? e.message : 'Sign-in failed'
+      window.history.replaceState(null, '', '/')
+    }
+  } else {
+    await c.checkSession().catch(() => {})
+  }
+  return c.isAuthenticated()
 }
 
-/** No Firebase config -> dev mode against the mock-mode Flask server. */
-export const DEV_MODE = !config.apiKey
-const auth = DEV_MODE ? null : getAuth(initializeApp(config))
+const ready: Promise<boolean> = client ? init(client) : Promise.resolve(true)
 
-/** Firebase ID token for `Authorization: Bearer ...`. The Flask server verifies it. */
-export async function getIdToken() {
-  if (!auth) return 'dev-token'
-  const token = await auth.currentUser?.getIdToken()
+/** Access token for `Authorization: Bearer ...`. */
+export async function getToken(): Promise<string> {
+  if (!client) return 'dev-token'
+  await ready
+  const token = await client.getTokenSilently()
   if (!token) throw new Error('Not signed in')
   return token
 }
 
-export const login = (email: string, password: string) =>
-  auth ? signInWithEmailAndPassword(auth, email, password) : Promise.resolve()
-export const register = (email: string, password: string) =>
-  auth ? createUserWithEmailAndPassword(auth, email, password) : Promise.resolve()
-export const logout = () => (auth ? signOut(auth) : Promise.resolve())
+/** Why the last sign-in failed, if it did. */
+export const getAuthError = () => authError
 
-/** undefined = still loading, null = signed out. Dev mode is always "signed in". */
-export function useUser(): User | null | undefined | 'dev' {
-  const [user, setUser] = useState<User | null | undefined>(auth ? undefined : null)
-  useEffect(() => (auth ? onAuthStateChanged(auth, setUser) : undefined), [])
-  return DEV_MODE ? 'dev' : user
+const redirect = (screen: 'login' | 'signup') =>
+  client?.loginWithRedirect<AppState>({
+    appState: { returnTo: window.location.pathname },
+    authorizationParams: { screen_hint: screen },
+  }) ?? Promise.resolve()
+
+export const login = () => redirect('login')
+export const register = () => redirect('signup')
+export const logout = () =>
+  client?.logout({ logoutParams: { returnTo: window.location.origin } }) ?? Promise.resolve()
+
+/** undefined = still loading. Dev mode is always signed in. */
+export function useSignedIn(): boolean | undefined {
+  const [signedIn, setSignedIn] = useState<boolean | undefined>(DEV_MODE ? true : undefined)
+  useEffect(() => {
+    if (!DEV_MODE) ready.then(setSignedIn, () => setSignedIn(false))
+  }, [])
+  return signedIn
 }

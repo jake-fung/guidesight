@@ -8,17 +8,16 @@ feels a buzz on the harness handle.
 Built for HackCamp 2026.
 
 ```
- UNO R4 WiFi harness ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / AssemblyAI / Firestore
+ UNO R4 WiFi harness ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore / Auth0
  (HC-SR04, buzzer)   ◀──buzz───┘   ▲     │
                                    │     └──live events──▶ walker web app on the phone (/walk)
                     frames, voice ─┘                        (camera, mic, GPS, speech)
-                                                           caregiver dashboard (/): map, fatigue, hotspots
 ```
 
 | Folder              | What                                                              | Stack |
 |---------------------|-------------------------------------------------------------------|-------|
-| `server/`           | API: walks, frames, voice questions, live harness link, dashboard data | Flask, flask-sock, firebase-admin, google-genai, AssemblyAI |
-| `dashboard/`        | Web app. `/walk`: Login → Setup (pair harness, preferences) → Live Walk. `/`: walk dashboard | React, Vite, Tailwind v4, Leaflet |
+| `server/`           | API: profile & first-run setup, walks, frames, voice questions, live harness link | Flask, flask-sock, PyJWT (Auth0), firebase-admin (Firestore), google-genai, ElevenLabs |
+| `dashboard/`        | Web app. `/walk`: Login → Setup (pair harness, preferences) → Live Walk. `/`: walk dashboard | React, Vite, Tailwind v4, Leaflet, Auth0 SPA SDK |
 | `firmware/uno_r4/`  | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | Arduino UNO R4 WiFi, ArduinoHttpClient |
 
 ## Quick start (mock mode, no API keys)
@@ -35,7 +34,6 @@ cp .env.example .env
 
 # 2. Web app (walker app + dashboard). Vite forwards /api to the server.
 cd dashboard && cp .env.example .env && npm install && npm run dev
-#   http://localhost:5173       dashboard, click "Load demo data"
 #   http://localhost:5173/walk  walker app
 ```
 
@@ -78,35 +76,76 @@ commands need the server link.
 
 ## Going live
 
-1. **Firebase**: create a project, enable Email/Password auth and Firestore.
-   - Web app: copy the web app config into `dashboard/.env`.
-   - Server: download a service-account JSON and set `GOOGLE_APPLICATION_CREDENTIALS` to its path.
-     The server then verifies ID tokens and stores data in Firestore. The `/api/dev/seed` route turns off.
-2. **Harness key**: set `HARNESS_KEY` in `server/.env` and the same value in `arduino_secrets.h`.
-   With Firebase on, harnesses can't connect without it.
-3. **Gemini**: set `GEMINI_API_KEY`. `GEMINI_MODEL` defaults to `gemini-flash-latest`.
-4. **AssemblyAI**: set `ASSEMBLYAI_API_KEY`.
-5. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
+1. **Auth0** (login):
+   - **APIs → Create API**. Pick an identifier such as `https://api.guidesight.app` (it's only a name,
+     nothing is served there). Signing algorithm RS256.
+   - **Applications → Create Application → Single Page Application**. Under Settings:
+     - Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins: `http://localhost:5173`
+       plus your tunnel or deployed URL (for quick tunnels, `https://*.trycloudflare.com`; if Auth0
+       won't take the wildcard, add the exact URL each time it changes).
+     - Turn on **Refresh Token Rotation**. The app uses refresh tokens so Safari keeps people signed in.
+   - Optional, recommended for blind users: turn on **passkeys** (Face ID / Touch ID instead of typing a
+     password) under Authentication → Database → your connection → Authentication Methods.
+   - `dashboard/.env`: `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE` (the API identifier).
+   - `server/.env`: `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` (same values). The server then checks access
+     tokens.
+2. **Firestore** (storage): create a Firebase project with Firestore, download a service-account JSON
+   (Project settings → Service accounts) and set `GOOGLE_APPLICATION_CREDENTIALS` to its path.
+   Blank = in-memory storage. Login and storage turn on separately.
+3. **Harness key**: set `HARNESS_KEY` in `server/.env` and the same value in `arduino_secrets.h`.
+   With Auth0 on, harnesses can't connect without it.
+4. **Gemini**: set `GEMINI_API_KEY`. `GEMINI_MODEL` defaults to `gemini-flash-latest`.
+5. **ElevenLabs** (speech-to-text): set `ELEVENLABS_API_KEY`. `ELEVENLABS_STT_MODEL` defaults to `scribe_v2`.
+6. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
    `index.html` so `/walk` loads. If the server is on another host, set `VITE_API_URL` and add the web
    app's origin to `CORS_ORIGINS`. Run the server as a **single process** with threads (for example
    `gunicorn -w 1 --threads 32`): live connections are kept in memory.
 
 ## API
 
-All routes need `Authorization: Bearer <Firebase ID token>`.
+All routes need `Authorization: Bearer <Auth0 access token>` (any token in mock mode).
 
 | Method & path                         | Body                                              | Returns                         |
 |---------------------------------------|---------------------------------------------------|---------------------------------|
+| `GET  /api/me`                        | –                                                 | `{id, profile, setup, settings, next_step}` |
+| `PUT  /api/me`                        | `{name?, email?}`                                 | same as `GET /api/me`           |
+| `PUT  /api/setup/:step`               | camera/microphone: `{status: "allowed"\|"skipped"}`, sensor: `{status: "skipped"}` | same as `GET /api/me` |
+| `GET  /api/setup/sensor`              | –                                                 | `{harness_id, online, nearby: [{id, same_network}]}` |
+| `POST /api/setup/sensor`              | `{harness_id}`                                    | `{harness_id, online, buzzed, me}`, buzzes the sensor |
+| `POST /api/setup/complete`            | –                                                 | same as `GET /api/me`           |
 | `POST /api/walks`                     | –                                                 | `{id, started_at, ...}`         |
 | `POST /api/walks/:id/harness-event`   | `{type: "obstacle"\|"stop"\|"pull", motion, location}` | `{event, capture_frame}`   |
 | `POST /api/walks/:id/frame`           | `{image: base64 jpeg, trigger, location}`         | `{alert, scene}`, buzzes the harness |
 | `POST /api/walks/:id/voice`           | multipart: `audio`, optional `image`, `lat`, `lng`| `{transcript, alert}`           |
 | `POST /api/walks/:id/end`             | –                                                 | walk                            |
 | `GET  /api/walks/:id`                 | –                                                 | `{walk, events}`                |
-| `GET/PUT /api/settings`               | voice & alert preferences, `harness_id`           | settings                        |
+| `GET/PUT /api/settings`               | voice, alert & accessibility preferences, `harness_id` | settings                   |
 | `GET  /api/harness/status`            | –                                                 | `{harness_id, online}`          |
 | `POST /api/harness/buzz`              | `{pattern: "short"\|"double"\|"long"}`            | `{delivered}`                   |
-| `GET  /api/dashboard/summary`         | –                                                 | `{walks, stops, hotspots}`      |
+
+Errors come back as `{error: "<reason>"}`.
+
+### Sign-up and first-run setup
+
+Sign-up itself (email + one-time code) happens on Auth0's hosted page. After it, the app calls
+`GET /api/me` and shows the screen named by `next_step`:
+
+| `next_step`  | Screen                                   | Answered with |
+|--------------|------------------------------------------|---------------|
+| `name`       | "What should Sighty call you?"           | `PUT /api/me {name}` |
+| `camera`     | "Let Sighty see ahead"                   | `PUT /api/setup/camera {status}` |
+| `microphone` | "Talk to Sighty"                         | `PUT /api/setup/microphone {status}` |
+| `sensor`     | "Connect your sensor" (poll `GET /api/setup/sensor` while searching) | `POST /api/setup/sensor {harness_id}` or `PUT /api/setup/sensor {status: "skipped"}` |
+| `finish`     | "You're all set"                         | `POST /api/setup/complete` |
+| `null`       | Home                                     | – |
+
+Camera and microphone permissions live in the browser; the server only records the answer so setup
+resumes where it left off. `nearby` lists switched-on sensors no one has paired yet, ones on the same
+network as the phone first. Any signed-in user can pair an unpaired sensor; a paired one can't be taken.
+
+Settings also hold the accessibility options: `text_size` (`default`|`large`|`extra_large`),
+`high_contrast`, `read_screen_aloud`, `zoom`, `voice_control`, plus `speech_rate` (0.5–2.0) and
+`haptics_enabled` ("Vibration alerts").
 
 `alert` is `{speak, urgency, haptic: "short"|"double"|"long"|null, speech_rate}`. The phone speaks it
 with the browser's speech synthesis; the server sends `haptic` straight to the harness.
@@ -120,7 +159,7 @@ Defined in `server/app/live.py`. The first message on each socket authenticates 
     and `ping` every 15 s
   - server → harness: `short` | `double` | `long` (buzz), or `pong`
 - `/api/live` (walker app):
-  - phone → server: `{"type":"auth","token":"<Firebase ID token>"}`, then `ping` every 25 s
+  - phone → server: `{"type":"auth","token":"<Auth0 access token>"}`, then `ping` every 25 s
   - server → phone: `{"type":"harness_event","event":{...}}` and `{"type":"harness_status","online":true}`
 
 A harness belongs to the user whose settings have its `harness_id`.
@@ -128,7 +167,7 @@ A harness belongs to the user whose settings have its `harness_id`.
 ## Firestore layout
 
 ```
-users/{uid}                                  { settings }
+users/{uid}                                  { profile, setup, settings }   uid = Auth0 user id (`sub`)
 users/{uid}/walks/{walkId}                   { started_at, ended_at, stop_count, pull_count }
 users/{uid}/walks/{walkId}/events/{eventId}  { type: obstacle|stop|pull|alert|question, at, location, ... }
 ```
@@ -138,5 +177,4 @@ users/{uid}/walks/{walkId}/events/{eventId}  { type: obstacle|stop|pull|alert|qu
 - Calibrate `OBSTACLE_CM` / `CLEAR_CM` in `firmware/uno_r4/uno_r4.ino` on a real harness.
 - Hands-free voice (wake word / voice activity detection) instead of tap-to-ask.
 - Background operation: keep the walk running with the screen locked.
-- Better fatigue model (`server/app/routes/dashboard.py`).
 - Optional server-side TTS voices (`server/app/services/alerts.py`).

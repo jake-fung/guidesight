@@ -8,6 +8,7 @@ __pycache__/
 .env
 *.local
 serviceAccount*.json
+secrets/
 
 # Arduino (Wi-Fi + server credentials)
 firmware/uno_r4/arduino_secrets.h

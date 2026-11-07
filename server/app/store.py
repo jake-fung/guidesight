@@ -1,7 +1,7 @@
-"""Storage for walk logs. Firestore in production, an in-memory dict in mock mode.
+"""Storage for users and walk logs. Firestore in production, an in-memory dict in mock mode.
 
 Firestore layout:
-    users/{uid}                                  -> {settings: {...}}
+    users/{uid}                                  -> {profile: {...}, setup: {...}, settings: {...}}
     users/{uid}/walks/{walkId}                   -> {started_at, ended_at, stop_count, pull_count}
     users/{uid}/walks/{walkId}/events/{eventId}  -> {type, at, location, motion, text}
 """
@@ -12,32 +12,70 @@ from flask import Flask, current_app
 
 from .config import Config
 
+DEFAULT_PROFILE = {
+    "name": None,  # what Sighty calls the user (Register step 1)
+    "email": None,  # shown in Settings; sent by the app from the Auth0 profile
+}
+
+# First-run Setup screens. Each step is "pending" until the user answers it.
+DEFAULT_SETUP = {
+    "camera": "pending",  # pending | allowed | skipped
+    "microphone": "pending",  # pending | allowed | skipped
+    "sensor": "pending",  # pending | connected | skipped
+    "completed_at": None,
+}
+
 DEFAULT_SETTINGS = {
     "voice": "default",
     "speech_rate": 1.0,
     "alert_verbosity": "short",  # short | detailed
-    "haptics_enabled": True,
+    "haptics_enabled": True,  # "Vibration alerts"
     "harness_id": None,
     "auto_describe_on_stop": True,
+    # Accessibility (Settings screen and the accessibility shortcut)
+    "text_size": "default",  # default | large | extra_large
+    "high_contrast": False,
+    "read_screen_aloud": False,
+    "zoom": False,
+    "voice_control": False,
 }
+
+SECTION_DEFAULTS = {"profile": DEFAULT_PROFILE, "setup": DEFAULT_SETUP, "settings": DEFAULT_SETTINGS}
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class MemoryStore:
+class _SectionHelpers:
+    """Shortcuts shared by both stores, built on get_user / save_section."""
+
+    def get_settings(self, uid):
+        return self.get_user(uid)["settings"]
+
+    def save_settings(self, uid, data):
+        return self.save_section(uid, "settings", data)
+
+    def harness_taken(self, uid, harness_id):
+        """True if another user has already paired this harness."""
+        owner = self.find_harness_owner(harness_id) if harness_id else None
+        return owner is not None and owner != uid
+
+
+class MemoryStore(_SectionHelpers):
     def __init__(self):
-        self.settings: dict[str, dict] = {}
+        self.users: dict[str, dict[str, dict]] = {}  # uid -> {profile, setup, settings}
         self.walks: dict[str, dict[str, dict]] = {}  # uid -> walk_id -> walk
         self.events: dict[str, list[dict]] = {}  # walk_id -> events
 
-    def get_settings(self, uid):
-        return {**DEFAULT_SETTINGS, **self.settings.get(uid, {})}
+    def get_user(self, uid):
+        doc = self.users.get(uid, {})
+        return {name: {**defaults, **doc.get(name, {})} for name, defaults in SECTION_DEFAULTS.items()}
 
-    def save_settings(self, uid, data):
-        self.settings[uid] = {**self.get_settings(uid), **data}
-        return self.settings[uid]
+    def save_section(self, uid, section, data):
+        merged = {**self.get_user(uid)[section], **data}
+        self.users.setdefault(uid, {})[section] = merged
+        return merged
 
     def create_walk(self, uid):
         walk = {"id": uuid.uuid4().hex, "started_at": now_iso(), "ended_at": None,
@@ -65,18 +103,15 @@ class MemoryStore:
             walk[f"{event['type']}_count"] += 1
         return event
 
-    def list_walks(self, uid, limit=20):
-        walks = sorted(self.walks.get(uid, {}).values(), key=lambda w: w["started_at"], reverse=True)
-        return walks[:limit]
-
     def list_events(self, uid, walk_id):
         return list(self.events.get(walk_id, [])) if self.get_walk(uid, walk_id) else []
 
     def find_harness_owner(self, harness_id):
-        return next((uid for uid, s in self.settings.items() if s.get("harness_id") == harness_id), None)
+        return next((uid for uid, doc in self.users.items()
+                     if doc.get("settings", {}).get("harness_id") == harness_id), None)
 
 
-class FirestoreStore:
+class FirestoreStore(_SectionHelpers):
     def __init__(self):
         import firebase_admin
         from firebase_admin import credentials, firestore
@@ -92,13 +127,14 @@ class FirestoreStore:
     def _walk(self, uid, walk_id):
         return self._user(uid).collection("walks").document(walk_id)
 
-    def get_settings(self, uid):
+    def get_user(self, uid):
         snap = self._user(uid).get()
-        return {**DEFAULT_SETTINGS, **((snap.to_dict() or {}).get("settings", {}) if snap.exists else {})}
+        doc = (snap.to_dict() or {}) if snap.exists else {}
+        return {name: {**defaults, **doc.get(name, {})} for name, defaults in SECTION_DEFAULTS.items()}
 
-    def save_settings(self, uid, data):
-        merged = {**self.get_settings(uid), **data}
-        self._user(uid).set({"settings": merged}, merge=True)
+    def save_section(self, uid, section, data):
+        merged = {**self.get_user(uid)[section], **data}
+        self._user(uid).set({section: merged}, merge=True)
         return merged
 
     def create_walk(self, uid):
@@ -128,13 +164,6 @@ class FirestoreStore:
             walk_ref.update({f"{event['type']}_count": self._increment(1)})
         return {"id": ref.id, **event}
 
-    def list_walks(self, uid, limit=20):
-        from firebase_admin import firestore
-
-        q = (self._user(uid).collection("walks")
-             .order_by("started_at", direction=firestore.Query.DESCENDING).limit(limit))
-        return [{"id": s.id, **s.to_dict()} for s in q.stream()]
-
     def list_events(self, uid, walk_id):
         q = self._walk(uid, walk_id).collection("events").order_by("at")
         return [{"id": s.id, **s.to_dict()} for s in q.stream()]
@@ -147,7 +176,7 @@ class FirestoreStore:
 
 
 def init_store(app: Flask, force_memory: bool = False):
-    use_firestore = Config.firebase_enabled() and not force_memory
+    use_firestore = Config.firestore_enabled() and not force_memory
     app.extensions["store"] = FirestoreStore() if use_firestore else MemoryStore()
 
 

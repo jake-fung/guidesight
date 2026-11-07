@@ -1,4 +1,4 @@
-import { getIdToken } from './auth'
+import { getToken } from './auth'
 
 /** Blank = same origin. In dev, Vite proxies /api to the Flask server (vite.config.ts). */
 export const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -42,7 +42,7 @@ export type FrameTrigger = HarnessEventType | 'periodic' | 'manual'
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${await getIdToken()}`)
+  headers.set('Authorization', `Bearer ${await getToken()}`)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
 
   const res = await fetch(`${API_URL}/api${path}`, { ...init, headers })

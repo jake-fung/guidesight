@@ -39,10 +39,9 @@ def test_full_walk_flow(client):
     assert r.get_json()["transcript"] == "Which bus is this?"
 
     client.post(f"/api/walks/{wid}/end", headers=AUTH)
-    summary = client.get("/api/dashboard/summary", headers=AUTH).get_json()
-    assert summary["walks"][0]["stops"] == 2
-    assert len(summary["stops"]) == 2
-    assert summary["hotspots"][0]["count"] == 2
+    record = client.get(f"/api/walks/{wid}", headers=AUTH).get_json()
+    assert record["walk"]["stop_count"] == 2 and record["walk"]["ended_at"]
+    assert [e["type"] for e in record["events"]] == ["stop", "stop", "alert", "question"]
 
 
 def test_settings_roundtrip(client):
@@ -50,16 +49,29 @@ def test_settings_roundtrip(client):
     assert r.get_json()["speech_rate"] == 1.3 and "bogus" not in r.get_json()
 
 
+def test_accessibility_settings(client):
+    r = client.put("/api/settings", headers=AUTH,
+                   json={"text_size": "extra_large", "high_contrast": True, "read_screen_aloud": True})
+    s = r.get_json()
+    assert s["text_size"] == "extra_large" and s["high_contrast"] is True and s["zoom"] is False
+
+
+@pytest.mark.parametrize("bad", [
+    {"text_size": "huge"},
+    {"high_contrast": "yes"},
+    {"speech_rate": 9},
+    {"speech_rate": "fast"},
+    {"alert_verbosity": "loud"},
+])
+def test_bad_settings_are_rejected(client, bad):
+    r = client.put("/api/settings", headers=AUTH, json=bad)
+    assert r.status_code == 400 and r.get_json()["error"]
+
+
 def test_bad_harness_event(client):
     wid = client.post("/api/walks", headers=AUTH).get_json()["id"]
     r = client.post(f"/api/walks/{wid}/harness-event", headers=AUTH, json={"type": "jump"})
     assert r.status_code == 400
-
-
-def test_dev_seed_feeds_dashboard(client):
-    client.post("/api/dev/seed", headers=AUTH)
-    summary = client.get("/api/dashboard/summary", headers=AUTH).get_json()
-    assert len(summary["walks"]) == 5 and summary["stops"] and summary["hotspots"]
 
 
 def test_obstacle_event_from_ultrasonic_harness(client):
@@ -74,6 +86,6 @@ def test_obstacle_event_from_ultrasonic_harness(client):
 
     client.post(f"/api/walks/{wid}/harness-event", headers=AUTH,
                 json={"type": "obstacle", "motion": {"cm": 60}, "location": {"lat": 43.65, "lng": -79.38}})
-    summary = client.get("/api/dashboard/summary", headers=AUTH).get_json()
-    assert summary["walks"][0]["obstacles"] == 2
-    assert summary["stops"][0]["type"] == "obstacle"
+    events = client.get(f"/api/walks/{wid}", headers=AUTH).get_json()["events"]
+    obstacles = [e for e in events if e["type"] == "obstacle"]
+    assert len(obstacles) == 2 and obstacles[1]["motion"] == {"cm": 60}
