@@ -1,5 +1,6 @@
 flask>=3.0
 flask-cors>=5.0
+flask-sock>=0.7
 python-dotenv>=1.0
 firebase-admin>=6.5
 google-genai>=1.0

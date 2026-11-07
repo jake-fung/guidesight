@@ -10,6 +10,8 @@ class Config:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
     ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
+    # Shared secret the harness sends when it connects. Required once Firebase is on.
+    HARNESS_KEY = os.getenv("HARNESS_KEY", "")
     CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
     PORT = int(os.getenv("PORT", "5001"))
 

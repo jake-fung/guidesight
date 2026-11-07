@@ -72,6 +72,9 @@ class MemoryStore:
     def list_events(self, uid, walk_id):
         return list(self.events.get(walk_id, [])) if self.get_walk(uid, walk_id) else []
 
+    def find_harness_owner(self, harness_id):
+        return next((uid for uid, s in self.settings.items() if s.get("harness_id") == harness_id), None)
+
 
 class FirestoreStore:
     def __init__(self):
@@ -135,6 +138,12 @@ class FirestoreStore:
     def list_events(self, uid, walk_id):
         q = self._walk(uid, walk_id).collection("events").order_by("at")
         return [{"id": s.id, **s.to_dict()} for s in q.stream()]
+
+    def find_harness_owner(self, harness_id):
+        from google.cloud.firestore_v1 import FieldFilter
+
+        q = self.db.collection("users").where(filter=FieldFilter("settings.harness_id", "==", harness_id)).limit(1)
+        return next((s.id for s in q.stream()), None)
 
 
 def init_store(app: Flask, force_memory: bool = False):

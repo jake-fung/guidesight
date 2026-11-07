@@ -10,6 +10,7 @@ from ..store import get_store
 bp = Blueprint("dashboard", __name__)
 
 HOTSPOT_PRECISION = 3  # decimal places of lat/lng, ~100 m grid cells
+MAP_EVENT_TYPES = ("stop", "pull", "obstacle")
 
 
 def _minutes(walk) -> float:
@@ -46,7 +47,7 @@ def summary():
         events = store.list_events(g.uid, walk["id"])
         for e in events:
             loc = e.get("location")
-            if e["type"] in ("stop", "pull") and loc:
+            if e["type"] in MAP_EVENT_TYPES and loc:
                 stop_points.append({"walk_id": walk["id"], "type": e["type"], "at": e["at"], **loc})
                 cells[(round(loc["lat"], HOTSPOT_PRECISION), round(loc["lng"], HOTSPOT_PRECISION))] += 1
         walk_stats.append({
@@ -55,6 +56,7 @@ def summary():
             "minutes": round(_minutes(walk), 1),
             "stops": walk.get("stop_count", 0),
             "pulls": walk.get("pull_count", 0),
+            "obstacles": sum(1 for e in events if e["type"] == "obstacle"),
             "fatigue": fatigue_score(walk, events),
         })
 

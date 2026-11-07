@@ -9,7 +9,7 @@ __pycache__/
 *.local
 serviceAccount*.json
 
-# PlatformIO
-firmware/.pio/
+# Arduino (Wi-Fi + server credentials)
+firmware/uno_r4/arduino_secrets.h
 
 .DS_Store

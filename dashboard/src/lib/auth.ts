@@ -1,5 +1,12 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from 'firebase/auth'
 import { useEffect, useState } from 'react'
 
 const config = {
@@ -13,6 +20,7 @@ const config = {
 export const DEV_MODE = !config.apiKey
 const auth = DEV_MODE ? null : getAuth(initializeApp(config))
 
+/** Firebase ID token for `Authorization: Bearer ...`. The Flask server verifies it. */
 export async function getIdToken() {
   if (!auth) return 'dev-token'
   const token = await auth.currentUser?.getIdToken()
@@ -22,6 +30,8 @@ export async function getIdToken() {
 
 export const login = (email: string, password: string) =>
   auth ? signInWithEmailAndPassword(auth, email, password) : Promise.resolve()
+export const register = (email: string, password: string) =>
+  auth ? createUserWithEmailAndPassword(auth, email, password) : Promise.resolve()
 export const logout = () => (auth ? signOut(auth) : Promise.resolve())
 
 /** undefined = still loading, null = signed out. Dev mode is always "signed in". */

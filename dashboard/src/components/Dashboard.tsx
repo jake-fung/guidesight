@@ -16,6 +16,7 @@ export default function Dashboard() {
     walks: data.walks.length,
     stops: data.walks.reduce((n, w) => n + w.stops, 0),
     pulls: data.walks.reduce((n, w) => n + w.pulls, 0),
+    obstacles: data.walks.reduce((n, w) => n + w.obstacles, 0),
     hotspots: data.hotspots.length,
   }
 
@@ -24,6 +25,9 @@ export default function Dashboard() {
       <header className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
         <h1 className="text-xl font-bold">GuideSight · Walk Dashboard</h1>
         <div className="flex gap-2">
+          <a href="/walk" className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-300">
+            Start a walk
+          </a>
           {DEV_MODE && (
             <button onClick={() => api.seedDemo().then(load)}
               className="rounded-lg bg-zinc-800 px-3 py-2 text-sm hover:bg-zinc-700">
@@ -42,8 +46,9 @@ export default function Dashboard() {
 
       {data && totals && (
         <main className="grid gap-6 p-6 lg:grid-cols-3">
-          <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:col-span-3">
+          <section className="grid grid-cols-2 gap-4 sm:grid-cols-5 lg:col-span-3">
             <Stat label="Walks" value={totals.walks} />
+            <Stat label="Obstacles" value={totals.obstacles} />
             <Stat label="Dog stops" value={totals.stops} />
             <Stat label="Pulls" value={totals.pulls} />
             <Stat label="Route hotspots" value={totals.hotspots} />
@@ -61,7 +66,7 @@ export default function Dashboard() {
                 <li key={w.id} className="text-sm">
                   <div className="flex justify-between">
                     <span>{new Date(w.started_at).toLocaleDateString()}</span>
-                    <span className="text-zinc-400">{w.minutes} min · {w.stops} stops · {w.pulls} pulls</span>
+                    <span className="text-zinc-400">{w.minutes} min · {w.obstacles} obstacles · {w.stops} stops · {w.pulls} pulls</span>
                   </div>
                   <FatigueBar value={w.fatigue} />
                 </li>

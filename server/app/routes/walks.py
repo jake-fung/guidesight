@@ -1,17 +1,15 @@
-"""Live Walk API: the phone streams frames, voice clips and harness events here."""
+"""Live Walk API: the walker web app streams frames, voice clips and harness events here."""
 import base64
 
 from flask import Blueprint, abort, g, jsonify, request
 
 from ..auth import require_auth
+from ..live import HARNESS_EVENT_TYPES, buzz_user_harness
 from ..services import stt, vision
 from ..services.alerts import build_alert
 from ..store import get_store
 
 bp = Blueprint("walks", __name__)
-
-HARNESS_EVENT_TYPES = ("stop", "pull", "obstacle")
-
 
 def _walk_or_404(walk_id):
     walk = get_store().get_walk(g.uid, walk_id)
@@ -43,9 +41,10 @@ def get_walk(walk_id):
 @bp.post("/<walk_id>/harness-event")
 @require_auth
 def harness_event(walk_id):
-    """Relayed from the harness over BLE: {type: "stop"|"pull"|"obstacle", motion: {...}, location}.
+    """Sent by the phone when the harness reports one over the live link (app/live.py), with the
+    phone's GPS fix: {type: "stop"|"pull"|"obstacle", motion: {...}, location}.
 
-    stop/pull come from the ESP32 MPU6050; obstacle ({cm}) comes from the UNO R4 HC-SR04.
+    The UNO R4 harness sends obstacle ({cm}) from its HC-SR04; stop/pull ({accel}) are for a motion sensor.
     """
     _walk_or_404(walk_id)
     body = request.get_json(force=True)
@@ -73,7 +72,10 @@ def frame(walk_id):
         abort(400, description="image (base64 jpeg) is required")
 
     scene = vision.describe_scene(image, body.get("trigger", "stop"))
-    alert = build_alert(scene, get_store().get_settings(g.uid))
+    settings = get_store().get_settings(g.uid)
+    alert = build_alert(scene, settings)
+    if alert["haptic"]:
+        buzz_user_harness(g.uid, alert["haptic"], settings)  # straight to the harness, no phone round trip
     get_store().add_event(g.uid, walk_id, {
         "type": "alert",
         "text": alert["speak"],

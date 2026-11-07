@@ -18,4 +18,6 @@ def get_settings():
 def update_settings():
     body = request.get_json(force=True) or {}
     allowed = {k: v for k, v in body.items() if k in DEFAULT_SETTINGS}
+    if "harness_id" in allowed:
+        allowed["harness_id"] = str(allowed["harness_id"] or "").strip() or None
     return jsonify(get_store().save_settings(g.uid, allowed))

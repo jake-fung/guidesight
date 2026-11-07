@@ -71,3 +71,9 @@ def test_obstacle_event_from_ultrasonic_harness(client):
     r = client.post(f"/api/walks/{wid}/frame", headers=AUTH,
                     json={"image": JPEG, "trigger": "obstacle"})
     assert r.get_json()["alert"]["speak"]
+
+    client.post(f"/api/walks/{wid}/harness-event", headers=AUTH,
+                json={"type": "obstacle", "motion": {"cm": 60}, "location": {"lat": 43.65, "lng": -79.38}})
+    summary = client.get("/api/dashboard/summary", headers=AUTH).get_json()
+    assert summary["walks"][0]["obstacles"] == 2
+    assert summary["stops"][0]["type"] == "obstacle"

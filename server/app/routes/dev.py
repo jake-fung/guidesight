@@ -25,7 +25,7 @@ def seed():
         for i in range(rng.randint(4, 9)):
             lat, lng = rng.choice(CORNERS)
             event = store.add_event(g.uid, walk["id"], {
-                "type": rng.choice(["stop", "stop", "stop", "pull"]),
+                "type": rng.choice(["obstacle", "obstacle", "stop", "pull"]),
                 "location": {"lat": lat + rng.uniform(-2e-4, 2e-4), "lng": lng + rng.uniform(-2e-4, 2e-4)},
                 "motion": {"accel": round(rng.uniform(0.05, 7), 2)},
             })
