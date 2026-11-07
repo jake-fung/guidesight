@@ -1,0 +1,15 @@
+[Unit]
+Description=GuideSight harness Bluetooth service
+After=bluetooth.target arduino-router.service
+Wants=bluetooth.target
+
+[Service]
+# Root so the service can reach both BlueZ and /var/run/arduino-router.sock without extra setup.
+User=root
+WorkingDirectory=/opt/guidesight-harness
+ExecStart=/opt/guidesight-harness/.venv/bin/python harness_ble.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

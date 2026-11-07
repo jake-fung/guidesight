@@ -1,4 +1,5 @@
-// Shared BLE contract. Keep these in sync with mobile/src/lib/harness.ts.
+// Shared BLE contract. Keep these in sync with mobile/src/lib/harness.ts
+// and firmware/uno-q/linux/harness_ble.py.
 #pragma once
 
 #define DEVICE_NAME          "GuideSight-Harness"

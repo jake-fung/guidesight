@@ -15,7 +15,7 @@ what's ahead, and the user hears a short warning in their earbuds and feels a bu
 | `server/`    | API: walks, frames, voice questions, harness events, dashboard data  | Flask, firebase-admin, google-genai, AssemblyAI |
 | `mobile/`    | Login → Setup (pair harness, preferences) → Live Walk                | Expo SDK 58, Expo Router, react-native-ble-plx |
 | `dashboard/` | Map of stop events, dog activity & fatigue, route hotspots           | React, Vite, Tailwind v4, Leaflet       |
-| `firmware/`  | Stop/pull detection, BLE notify, vibration patterns                  | ESP32 Arduino via PlatformIO            |
+| `firmware/`  | Stop/pull detection, BLE notify, vibration patterns                  | ESP32 Arduino via PlatformIO, or Arduino UNO Q (`firmware/uno-q/`) |
 
 ## Quick start (mock mode, no API keys)
 
@@ -70,7 +70,7 @@ with `expo-speech` and writes `haptic` to the harness.
 
 ## BLE contract
 
-Defined in `firmware/include/ble_protocol.h` and mirrored in `mobile/src/lib/harness.ts`.
+Defined in `firmware/include/ble_protocol.h` and mirrored in `mobile/src/lib/harness.ts` and `firmware/uno-q/linux/harness_ble.py`.
 
 - Service `6e8a0001-…`
 - Event characteristic (notify), harness → phone: `{"type":"stop","accel":0.04,"ms":123456}`
