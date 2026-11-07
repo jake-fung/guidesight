@@ -16,6 +16,7 @@ what's ahead, and the user hears a short warning in their earbuds and feels a bu
 | `mobile/`    | Login → Setup (pair harness, preferences) → Live Walk                | Expo SDK 58, Expo Router, react-native-ble-plx |
 | `dashboard/` | Map of stop events, dog activity & fatigue, route hotspots           | React, Vite, Tailwind v4, Leaflet       |
 | `firmware/`  | Stop/pull detection, BLE notify, vibration patterns                  | ESP32 Arduino via PlatformIO, or Arduino UNO Q (`firmware/uno-q/`) |
+| `firmware/uno_r4/` | Ultrasonic obstacle detection (HC-SR04) + buzzer, same BLE contract | Arduino UNO R4 WiFi, ArduinoBLE |
 
 ## Quick start (mock mode, no API keys)
 
@@ -40,6 +41,21 @@ npx expo run:ios                        # or run:android, or: npx eas-cli build 
 # 4. Firmware
 cd firmware && pio run -t upload && pio device monitor
 ```
+
+## UNO R4 WiFi ultrasonic harness
+
+`firmware/uno_r4/uno_r4.ino` is a drop-in harness that needs no MPU6050. It uses an HC-SR04 to spot
+obstacles ahead, beeps faster as they get closer, and sends `obstacle` events over the same BLE
+service, so the phone grabs a frame and Gemini says what the obstacle is.
+
+| From | To UNO R4 WiFi |
+|---|---|
+| HC-SR04 VCC / GND | 5V / GND |
+| HC-SR04 TRIG / ECHO | D9 / D10 (no resistors needed, the R4 is 5 V) |
+| Buzzer + / − / S | 3.3V / GND / D8 |
+
+Arduino IDE: install the "Arduino UNO R4 Boards" core and the **ArduinoBLE** library, pick
+"Arduino UNO R4 WiFi", then upload. Open the Serial Monitor at 115200 to watch events.
 
 ## Going live
 
@@ -73,7 +89,8 @@ with `expo-speech` and writes `haptic` to the harness.
 Defined in `firmware/include/ble_protocol.h` and mirrored in `mobile/src/lib/harness.ts` and `firmware/uno-q/linux/harness_ble.py`.
 
 - Service `6e8a0001-…`
-- Event characteristic (notify), harness → phone: `{"type":"stop","accel":0.04,"ms":123456}`
+- Event characteristic (notify), harness → phone: `{"type":"stop","accel":0.04,"ms":123456}`,
+  or `{"type":"obstacle","cm":85}` from the UNO R4 ultrasonic harness
 - Command characteristic (write), phone → harness: `short` | `double` | `long`
 
 ## Firestore layout

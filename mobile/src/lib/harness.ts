@@ -10,7 +10,9 @@ const SERVICE_UUID = '6e8a0001-4b1c-4f5e-9c2a-7d3f1a2b3c4d';
 const EVENT_CHAR_UUID = '6e8a0002-4b1c-4f5e-9c2a-7d3f1a2b3c4d';
 const COMMAND_CHAR_UUID = '6e8a0003-4b1c-4f5e-9c2a-7d3f1a2b3c4d';
 
-export type HarnessEvent = { type: 'stop' | 'pull'; accel: number; ms: number };
+export type HarnessEventType = 'stop' | 'pull' | 'obstacle';
+/** stop/pull come from the MPU6050 (accel); obstacle comes from the HC-SR04 (cm). */
+export type HarnessEvent = { type: HarnessEventType; accel?: number; cm?: number; ms?: number };
 export type HapticPattern = 'short' | 'double' | 'long';
 
 let manager: BleManager | null = null;
@@ -53,14 +55,15 @@ export async function pairHarness(timeoutMs = 10_000): Promise<Device> {
     });
   });
 
-  device = await found.connect();
+  // Larger MTU so JSON events aren't cut off at the 20-byte BLE default (Android).
+  device = await found.connect({ requestMTU: 185 });
   await device.discoverAllServicesAndCharacteristics();
   return device;
 }
 
 /** Reconnect to a harness paired earlier (id saved in settings.harness_id). */
 export async function reconnectHarness(id: string) {
-  device = await ble().connectToDevice(id);
+  device = await ble().connectToDevice(id, { requestMTU: 185 });
   await device.discoverAllServicesAndCharacteristics();
   return device;
 }
@@ -69,7 +72,7 @@ export function isConnected() {
   return device !== null;
 }
 
-/** Subscribe to stop/pull events from the motion sensor. */
+/** Subscribe to stop/pull (motion sensor) and obstacle (ultrasonic) events. */
 export function onHarnessEvent(listener: (e: HarnessEvent) => void): Subscription | null {
   if (!device) return null;
   return device.monitorCharacteristicForService(SERVICE_UUID, EVENT_CHAR_UUID, (error, c) => {
