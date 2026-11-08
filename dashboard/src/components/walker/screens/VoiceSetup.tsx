@@ -181,10 +181,10 @@ export function VoiceChat() {
   // ---- Sensor and finish ------------------------------------------------------------------------------
   const finish = useCallback((found: boolean) => {
     const name = profile.name ? `, ${profile.name}` : ''
-    const text = `${found ? 'Found it! ' : ''}You’re all set${name}. Say “Hey Sighty” any time.`
+    const text = `${found ? 'Found it! ' : ''}You’re all set${name}.`
     log({ who: 'sighty', text: lineFor('sensor').text }, ...(found ? [{ who: 'done' as const, text: 'Sensor connected' }] : []))
     setTurn('done')
-    setLine({ text, spoken: `${text} Hold your phone at chest height. Starting guide mode.` })
+    setLine({ text, spoken: `${text} Taking you home.` })
   }, [log, profile.name])
 
   useVoiceCommands({ skip: () => finish(false), repeat: () => voice.replay() }, turn === 'sensor')
@@ -197,7 +197,7 @@ export function VoiceChat() {
 
   useEffect(() => {
     if (turn !== 'done') return
-    if (count <= 0) return go('d4')
+    if (count <= 0) return go('d1')
     // Count down slower while Sighty is still talking.
     const t = setTimeout(() => setCount((c) => c - 1), voice.get().status === 'speaking' ? 2000 : 1000)
     return () => clearTimeout(t)
@@ -207,7 +207,8 @@ export function VoiceChat() {
   const answering = turn === 'how' || turn === 'name' || turn === 'email'
   const recording = answering && phase !== 'ask'
   return (
-    <Screen>
+    // Fixed to the viewport height so the chat history scrolls instead of pushing the page past the screen.
+    <Screen className="h-dvh">
       <ChatHeader step={turn === 'done' ? 'done' : STEP[turn]} onType={() => { voice.stop(); go('b1') }} />
       {/* The whole area below the header is one tap target; the big button is its visible, focusable part. */}
       <div className="flex min-h-0 flex-1 cursor-pointer select-none flex-col" onClick={tap}>
@@ -245,7 +246,7 @@ function hintFor(turn: Turn, phase: 'ask' | 'record' | 'saving', error: string |
     case 'mic': return 'Everything I say is read out loud'
     case 'camera': return 'I only look while you’re walking'
     case 'sensor': return 'Say “skip” to set it up later'
-    case 'done': return 'Hold your phone at chest height'
+    case 'done': return 'Setup complete'
     default: return phase === 'ask' ? 'Tap once, then talk' : 'Not right? Double-tap to say it again'
   }
 }
@@ -274,12 +275,19 @@ function ChatHeader({ step, onType }: { step: number | 'done'; onType: () => voi
   )
 }
 
-/** Earlier messages, newest at the bottom. Older ones slide off the top. */
+/** Earlier messages, newest at the bottom. Scrolls when they don't fit, and follows new messages. */
 function History({ entries }: { entries: Entry[] }) {
+  const list = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    const el = list.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [entries.length])
   return (
-    <ol aria-label="Conversation so far" className="flex min-h-0 flex-1 flex-col justify-end gap-2 overflow-hidden">
-      {entries.slice(-6).map((e) => (
-        <li key={e.id} className={cx('flex shrink-0', e.who === 'you' ? 'justify-end' : e.who === 'done' ? 'justify-center' : 'justify-start')}>
+    // No justify-end: it would make overflowing messages unreachable. The first item's mt-auto
+    // keeps short histories at the bottom instead.
+    <ol ref={list} aria-label="Conversation so far" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
+      {entries.map((e, i) => (
+        <li key={e.id} className={cx('flex shrink-0', i === 0 && 'mt-auto', e.who === 'you' ? 'justify-end' : e.who === 'done' ? 'justify-center' : 'justify-start')}>
           {e.who === 'sighty' && (
             <div className="max-w-[80%] rounded-[16px] rounded-tl-[6px] bg-gs-tint px-3.5 py-2.5">
               <p className="t-caption text-gs-muted">Sighty</p>
@@ -345,7 +353,7 @@ function ActionButton({ turn, phase, count }: { turn: Turn; phase: 'ask' | 'reco
   } else if (turn === 'done') {
     tone = 'bg-gs-clear text-white'
     icon = <img src={icons.checkWhite} alt="" className="size-4" />
-    label = `Starting guide mode in ${Math.max(count, 1)}…`
+    label = `Going home in ${Math.max(count, 1)}…`
   } else if (phase === 'record') {
     tone = 'bg-gs-ink text-white'
     icon = <img src={icons.checkWhite} alt="" className="size-4" />

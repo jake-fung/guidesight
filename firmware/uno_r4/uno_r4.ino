@@ -3,6 +3,7 @@
 //
 // Talks to the Flask server over Wi-Fi, through a WebSocket it keeps open (server/app/live.py):
 //   harness -> server: {"type":"hello","id":...,"key":...} once, then {"type":"obstacle","cm":85}
+//   (again each time the obstacle comes 50 cm closer)
 //                      and "ping" every 15 s
 //   server -> harness: "short" | "double" | "long" (buzz pattern), or "pong"
 // The server forwards obstacle events to the walker web app on the phone.
@@ -30,6 +31,8 @@ constexpr long OBSTACLE_CM = 150;           // send an event when something come
 constexpr long CLEAR_CM = 200;              // ...and re-arm once it's farther than this (hysteresis)
 constexpr long BEEP_CM = 200;               // local proximity beeping range
 constexpr uint32_t EVENT_COOLDOWN_MS = 3000;
+constexpr long CLOSER_CM = 50;              // send again each time it comes this much closer (distance alerts)
+constexpr uint32_t CLOSER_COOLDOWN_MS = 800;
 constexpr uint32_t SAMPLE_MS = 60;          // HC-SR04 needs ~60 ms between pings
 
 // ---- Server link ------------------------------------------------------------
@@ -51,6 +54,7 @@ uint32_t lastHeardAt = 0;
 
 bool armed = true;
 uint32_t lastEventAt = 0;
+long lastSentCm = 0;
 uint32_t nextBeepAt = 0;
 
 // ---- Sensor -----------------------------------------------------------------
@@ -193,10 +197,14 @@ void loop() {
 
   long cm = readDistanceCm();
 
-  // Phone event: fire once when something comes close, re-arm when it's clear again.
-  if (cm > 0 && cm < OBSTACLE_CM && armed && now - lastEventAt > EVENT_COOLDOWN_MS) {
+  // Phone event: fire when something comes close, again each CLOSER_CM nearer (so the phone can
+  // count the distance down), and re-arm once it's clear again.
+  bool first = armed && cm > 0 && cm < OBSTACLE_CM && now - lastEventAt > EVENT_COOLDOWN_MS;
+  bool closer = !armed && cm > 0 && cm <= lastSentCm - CLOSER_CM && now - lastEventAt > CLOSER_COOLDOWN_MS;
+  if (first || closer) {
     armed = false;
     lastEventAt = now;
+    lastSentCm = cm;
     sendEvent(cm);
   } else if (cm < 0 || cm > CLEAR_CM) {
     armed = true;

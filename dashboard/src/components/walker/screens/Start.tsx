@@ -141,7 +141,7 @@ export function A2SignInEmail() {
   )
 }
 
-/** Email code entry, shared by A3 (sign in) and B3 (register). */
+/** Email code entry for A3 (sign in). */
 export function CodeEntry({ header, onDone, cta }: { header: ReactNode; onDone: () => void; cta: string }) {
   const { profile } = useApp()
   const [code, setCode] = useState('')

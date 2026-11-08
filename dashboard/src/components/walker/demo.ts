@@ -1,4 +1,4 @@
-import type { Alert } from '../../lib/api'
+import type { Alert, Route } from '../../lib/api'
 
 /**
  * /walk?demo shows the prototype's sample content (camera scene, bench detection, canned answers)
@@ -20,4 +20,22 @@ export function demoAnswer(question: string) {
         : 'Yes — a bench is about 4 metres ahead, slightly to your right.'
   return new Promise<{ transcript: string; alert: Alert }>((r) =>
     setTimeout(() => r({ transcript: question || 'Is there a bench nearby?', alert: alert(speak) }), 700))
+}
+
+/** Demo mode's destination: the bench from the prototype, 180 m away (no server or GPS). */
+export function demoRoute(query: string): Route {
+  const start = { lat: 43.6532, lng: -79.3832 }
+  const corner = { lat: 43.6541, lng: -79.3832 }
+  const bench = { lat: 43.6541, lng: -79.3821 }
+  return {
+    destination: { name: /bench/i.test(query) || !query ? 'the bench' : query, address: 'Queen Street West, Toronto', location: bench },
+    distance_m: 180,
+    duration_s: 140,
+    steps: [
+      { instruction: 'Head north on Bay St toward Queen St W', maneuver: 'DEPART', distance_m: 100, duration_s: 80,
+        start, end: corner, points: [[start.lat, start.lng], [corner.lat, corner.lng]] },
+      { instruction: 'Turn right onto Queen St W. Destination will be on the right', maneuver: 'TURN_RIGHT', distance_m: 80,
+        duration_s: 60, start: corner, end: bench, points: [[corner.lat, corner.lng], [bench.lat, bench.lng]] },
+    ],
+  }
 }

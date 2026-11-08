@@ -280,6 +280,28 @@ export function useSpeech() {
   return useSyncExternalStore(voice.subscribe, voice.get, voice.get)
 }
 
+/** Priority of what announce() is saying right now (0 = nothing). */
+let announcing = 0
+let announced: Promise<void> = Promise.resolve()
+
+/**
+ * Speaks during a walk without cutting off something more important: news with a lower priority
+ * waits for the current announcement to end (and is dropped if that takes over 10 s). Equal or higher
+ * priority interrupts. Use 3 for obstacles, 2 for turns and answers, 1 for the rest.
+ */
+export async function announce(text: string, priority = 1) {
+  const asked = Date.now()
+  while (announcing > priority) {
+    await announced
+    if (Date.now() - asked > 10_000) return
+  }
+  const said = voice.say(text, { force: true })
+  announcing = priority
+  announced = said
+  await said
+  if (announced === said) announcing = 0
+}
+
 /** Reads `text` aloud when the screen opens (and when `text` changes). */
 export function useAutoRead(text: string, active = true) {
   useEffect(() => {

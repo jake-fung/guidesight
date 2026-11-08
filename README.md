@@ -16,8 +16,8 @@ Built for HackCamp 2026.
 
 | Folder              | What                                                              | Stack |
 |---------------------|-------------------------------------------------------------------|-------|
-| `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, TTS, live harness link | Flask, flask-sock, firebase-admin (Firestore), google-genai, ElevenLabs |
-| `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Guide mode, Ask, Read text, Settings). No login | React, Vite, Tailwind v4 |
+| `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, walking directions, TTS, live harness link | Flask, flask-sock, firebase-admin (Firestore), google-genai, Google Maps (Places + Routes), ElevenLabs |
+| `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Where to?, Guide mode with spoken turn-by-turn directions, Read text, Settings). No login | React, Vite, Tailwind v4 |
 | `firmware/uno_r4/`  | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | Arduino UNO R4 WiFi, ArduinoHttpClient |
 
 ## Quick start (mock mode, no API keys)
@@ -72,7 +72,8 @@ On iPhones, tap the first screen (**Tap anywhere to start**) yourself: Safari on
 4. In the walker app, open **Settings → Sensor** (or **Enter sensor ID** on the Connect your sensor step), type the
    same harness ID and tap **Save**, then **Test buzz**.
 
-The harness beeps faster as things get closer even when it's offline. Obstacle events and buzz
+The harness beeps faster as things get closer even when it's offline. Online, it tells the phone when
+something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
 commands need the server link.
 
 ## Going live
@@ -86,7 +87,10 @@ commands need the server link.
 4. **ElevenLabs** (speech-to-text for questions, text-to-speech for spoken alerts): set `ELEVENLABS_API_KEY`.
    `ELEVENLABS_STT_MODEL` defaults to `scribe_v2`, `ELEVENLABS_TTS_MODEL` to `eleven_flash_v2_5`, and
    `ELEVENLABS_VOICE_ID` to a premade voice. Without a key, the app speaks with the phone's built-in voice.
-5. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
+5. **Google Maps** (walking directions in Guide mode): in Google Cloud console, enable **Places API (New)**
+   and **Routes API**, create an API key and set `GOOGLE_MAPS_API_KEY`. The key stays on the server.
+   Without a key, any destination gets a made-up 200 m route starting where you stand.
+6. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
    `index.html` so `/walk` loads. If the server is on another host, set `VITE_API_URL` and add the web
    app's origin to `CORS_ORIGINS`. Run the server as a **single process** with threads (for example
    `gunicorn -w 1 --threads 32`): live connections are kept in memory.
@@ -105,9 +109,10 @@ letters, digits, `-` or `_`. Clearing the site's data on the phone starts over a
 | `GET  /api/setup/sensor`              | –                                                 | `{harness_id, online, nearby: [{id, same_network}]}` |
 | `POST /api/setup/sensor`              | `{harness_id}`                                    | `{harness_id, online, buzzed, me}`, buzzes the sensor |
 | `POST /api/setup/complete`            | –                                                 | same as `GET /api/me`           |
+| `POST /api/routes`                    | `{origin: {lat, lng}, destination: "Tim Hortons" \| {lat, lng, name?}}` | `{destination: {name, address, location}, distance_m, duration_s, steps: [{instruction, maneuver, distance_m, points, ...}]}`; 404 = not found |
 | `POST /api/walks`                     | –                                                 | `{id, started_at, ...}`         |
 | `POST /api/walks/:id/harness-event`   | `{type: "obstacle"\|"stop"\|"pull", motion, location}` | `{event, capture_frame}`   |
-| `POST /api/walks/:id/frame`           | `{image: base64 jpeg, trigger, location}`         | `{alert, scene}`, buzzes the harness |
+| `POST /api/walks/:id/frame`           | `{image: base64 jpeg, trigger, location}`         | `{alert, scene}`, buzzes the harness. `alert.obstacle` = `{what, distance_m, clock}`, `alert.avoid` = `left\|right\|stop\|none` |
 | `POST /api/walks/:id/voice`           | multipart: `audio`, optional `image`, `lat`, `lng`| `{transcript, alert}`           |
 | `POST /api/walks/:id/end`             | –                                                 | walk                            |
 | `POST /api/tts`                       | `{text, speed}`                                   | `audio/mpeg` clip; 503 without an ElevenLabs key |
