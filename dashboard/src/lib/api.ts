@@ -38,6 +38,10 @@ export type Alert = {
   avoid?: Avoid | null
   /** Stairs or a drop-off seen at any distance (always high urgency). */
   drop?: SeenObstacle | null
+  /** Something low to trip on or a level change: ramp, curb, single step, pothole, cable. */
+  trip?: SeenObstacle | null
+  /** Whether the camera can see the way ahead: "blocked" = covered or too dark, "away" = not pointing ahead. */
+  view?: 'ok' | 'blocked' | 'away'
   /** Stop now: "red light", "moving traffic" at any distance; stairs or a drop-off within 1 metre. */
   danger?: string | null
 }
@@ -123,6 +127,9 @@ export const api = {
   /** Walking route from `origin`. Text is searched near the origin; a Place re-routes to it. 404 = not found. */
   route: (destination: string | (LatLng & { name?: string; address?: string }), origin: LatLng) =>
     post<Route>('/routes', { destination, origin }),
+
+  /** Street address and nearest named place for "Where am I?". Either may be null. */
+  where: (here: LatLng) => post<{ address: string | null; place: string | null }>('/routes/where', here),
 
   startWalk: () => post<{ id: string }>('/walks'),
   endWalk: (walkId: string) => post(`/walks/${walkId}/end`),

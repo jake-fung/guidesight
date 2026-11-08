@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Alert, type Avoid, type FrameTrigger, type HarnessEvent, type LatLng, type Route, type SeenObstacle } from '../../lib/api'
 import type { LiveLink } from '../../lib/live'
 import { DEMO, demoAnswer } from './demo'
-import { Navigator, headingFrom, metres, type NavEvent, type NavStatus } from './navigation'
+import { Navigator, compassWord, headingFrom, metres, speakable, type NavEvent, type NavStatus } from './navigation'
 
 const PERIODIC_FRAME_MS = 15_000
 /** Looks ahead more often while guiding somewhere, to catch obstacles on the way. */
@@ -55,6 +55,35 @@ const DANGER_SNOOZE_MS = 20_000
 /** While stairs or a drop-off are ahead but not yet close, look again this soon (not every 6-15 s). */
 const DROP_RECHECK_MS = 500
 
+/**
+ * Things that stop Sighty warning about what's ahead during a walk. Each is said once when it starts
+ * and once when it's fixed, so silence never hides a broken camera or sensor.
+ */
+export type Problem = 'server' | 'camera' | 'view' | 'sensor'
+export type ProblemNews = { problem: Problem; lost: boolean; text: string }
+const PROBLEM_TEXT: Record<Problem, [lost: string, back: string]> = {
+  server: ['Lost connection. I can’t warn you about what’s ahead, only the sensor’s beeps work. Go carefully.', 'Connected again.'],
+  camera: ['The camera isn’t working, so I can’t see what’s ahead. Go carefully.', 'The camera is working again.'],
+  view: ['I can’t see the path ahead. Hold your phone up with the camera facing forward, and check nothing covers it.', 'I can see ahead again.'],
+  sensor: ['Sensor disconnected. I’m only using the camera now. Go carefully.', 'Sensor connected again.'],
+}
+/** A lost connection or sensor has to last this long before it's said, so short blips stay quiet. */
+const LINK_GRACE_MS = 5_000
+/** Camera looks in a row that fail, or can't see ahead, before it's said. */
+const BAD_LOOKS = 2
+
+/** "You're at 123 Main Street, next to Tim Hortons. You're facing north-east." */
+export function whereText(where: { address: string | null; place: string | null }, facing: number | null) {
+  const w = { address: where.address && speakable(where.address), place: where.place }
+  // "at 123 Main Street", but "on Main Street" without a house number.
+  const street = w.address && `${/^\d/.test(w.address) ? 'at' : 'on'} ${w.address}`
+  const at = street && w.place ? `You’re ${street}, next to ${w.place}.`
+    : street ? `You’re ${street}.`
+    : w.place ? `You’re next to ${w.place}.`
+    : 'I couldn’t find the address here.'
+  return facing === null ? at : `${at} You’re facing ${compassWord(facing)}.`
+}
+
 export type WalkSummary = { seconds: number; alerts: number; metres: number; spotted: string[] }
 
 function locationError(e: GeolocationPositionError) {
@@ -72,8 +101,14 @@ export function useWalkSession(link: LiveLink) {
   const location = useRef<LatLng | undefined>(undefined)
   const lastFix = useRef<LatLng | undefined>(undefined)
   const frameInFlight = useRef(false)
+  /** The walk being started, so a second start() waits for it instead of starting another. */
+  const starting = useRef<Promise<string | null> | null>(null)
   const onAlertRef = useRef<((a: Alert, trigger: FrameTrigger) => void) | null>(null)
   const onNavRef = useRef<((e: NavEvent) => void) | null>(null)
+  const onProblemRef = useRef<((news: ProblemNews) => void) | null>(null)
+  const problems = useRef(new Set<Problem>())
+  const badLooks = useRef(0)
+  const badViews = useRef(0)
   const guide = useRef<Navigator | null>(null)
   /** Compass heading the phone's camera faces, and the GPS direction of travel while walking. */
   const compass = useRef<number | null>(null)
@@ -111,6 +146,14 @@ export function useWalkSession(link: LiveLink) {
     }
   }, [])
 
+  /** Turns the camera off (its light goes out). requestMedia turns it back on. */
+  const releaseCamera = useCallback(() => {
+    stream.current?.getTracks().forEach((t) => t.stop())
+    stream.current = null
+    if (video.current) video.current.srcObject = null
+    setHasCamera(false)
+  }, [])
+
   /** Asks for camera and/or mic. Resolves true when granted. */
   const requestMedia = useCallback(async (kinds: { video?: boolean; audio?: boolean }) => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -122,7 +165,8 @@ export function useWalkSession(link: LiveLink) {
         video: kinds.video ? { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } } : false,
         audio: !!kinds.audio,
       })
-      // Keep the camera stream for Guide mode; a mic-only permission check can be released.
+      // Keep the camera stream (the app turns it off on screens that don't use it); a mic-only
+      // permission check can be released.
       if (kinds.video) {
         stream.current?.getTracks().forEach((t) => t.stop())
         stream.current = media
@@ -185,15 +229,45 @@ export function useWalkSession(link: LiveLink) {
     return ask === 'start' ? g.startText(facing()) : g.describe(ask, facing(), location.current)
   }, [facing])
 
+  /** Starts or ends a problem; says so only when that changes. */
+  const report = useCallback((problem: Problem, on: boolean) => {
+    const set = problems.current
+    if (on === set.has(problem)) return
+    // While the server can't be reached, camera and sensor trouble is part of that: don't pile on.
+    if (on && problem !== 'server' && set.has('server')) return
+    if (on) set.add(problem)
+    else set.delete(problem)
+    if (problem === 'server' && on) ['camera', 'view', 'sensor'].forEach((p) => set.delete(p as Problem))
+    if (problem === 'server' && !on) badLooks.current = 0 // looks that failed while offline don't count
+    onProblemRef.current?.({ problem, lost: on, text: PROBLEM_TEXT[problem][on ? 0 : 1] })
+  }, [])
+
+  /** A camera look that failed: no picture, or no answer from the server. */
+  const badLook = useCallback(() => {
+    if (++badLooks.current >= BAD_LOOKS) report('camera', true)
+  }, [report])
+
   /** Sends the current frame and returns what Sighty says about it. */
   const describe = useCallback(async (trigger: FrameTrigger): Promise<Alert | null> => {
     if (!walkId.current || frameInFlight.current) return null
     const canvas = grabFrame(video.current)
-    if (!canvas) return null
+    if (!canvas) {
+      // No picture while the camera is on screen: the camera stopped (e.g. another app took it).
+      if (video.current && trigger === 'periodic') badLook()
+      return null
+    }
+    if (stream.current?.getVideoTracks()[0]?.readyState === 'ended') {
+      badLook()
+      return null
+    }
     frameInFlight.current = true
     try {
       const image = canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1]
       const { alert } = await api.sendFrame(walkId.current, image, trigger, location.current)
+      badLooks.current = 0
+      report('camera', false)
+      badViews.current = alert.view && alert.view !== 'ok' ? badViews.current + 1 : 0
+      report('view', badViews.current >= BAD_LOOKS)
       setLastAlert(alert.speak)
       setUrgency(alert.urgency)
       note(alert.speak)
@@ -212,20 +286,22 @@ export function useWalkSession(link: LiveLink) {
       return alert
     } catch (e) {
       console.warn('frame failed', e)
+      badLook()
       return null
     } finally {
       frameInFlight.current = false
     }
-  }, [note])
+  }, [note, report, badLook])
 
-  /** Starts a walk on the server (camera, GPS and wake lock come with it). Safe to call twice. */
-  const start = useCallback(async () => {
-    if (walkId.current) return walkId.current
+  const startWalk = useCallback(async (): Promise<string | null> => {
     setStatus('Starting…')
     if (!stream.current && !DEMO) await requestMedia({ video: true })
     try {
       const { id } = DEMO ? { id: 'demo' } : await api.startWalk()
       walkId.current = id
+      problems.current.clear()
+      badLooks.current = 0
+      badViews.current = 0
       // A walk without a fresh destination (e.g. from Read text) drops the last trip's route.
       if (!guide.current) setRoute(null)
       setActive(true)
@@ -242,6 +318,13 @@ export function useWalkSession(link: LiveLink) {
       return null
     }
   }, [requestMedia, setRoute])
+
+  /** Starts a walk on the server (camera, GPS and wake lock come with it). Safe to call twice, even at once. */
+  const start = useCallback(async () => {
+    if (walkId.current) return walkId.current
+    if (!starting.current) starting.current = startWalk().finally(() => { starting.current = null })
+    return starting.current
+  }, [startWalk])
 
   const end = useCallback(async (): Promise<WalkSummary> => {
     const id = walkId.current
@@ -339,6 +422,37 @@ export function useWalkSession(link: LiveLink) {
     }
   }, [active, describe, setEventHandler, reroute])
 
+  // Lost connection or sensor, said after a short grace period so blips stay quiet.
+  const { serverOnline, harnessOnline, harnessId } = link
+  useEffect(() => {
+    if (!active || DEMO) return
+    if (serverOnline === false) {
+      const t = setTimeout(() => report('server', true), LINK_GRACE_MS)
+      return () => clearTimeout(t)
+    }
+    report('server', false)
+    // A sensor only counts as lost if one is paired (the server tells us which).
+    if (!harnessId || harnessOnline !== false) return void report('sensor', false)
+    const t = setTimeout(() => report('sensor', true), LINK_GRACE_MS)
+    return () => clearTimeout(t)
+  }, [active, serverOnline, harnessOnline, harnessId, report])
+
+  /** "Where am I?": street address, nearest place and (during a walk) which way they face. Never throws. */
+  const whereAmI = useCallback(async () => {
+    if (DEMO) return whereText({ address: '100 Queen Street West', place: 'City Hall' }, 45)
+    let here: LatLng
+    try {
+      here = active && location.current ? location.current : await locate()
+    } catch (e) {
+      return errorText(e) // already says what to do, e.g. turn location on
+    }
+    try {
+      return whereText(await api.where(here), active ? facing() : null)
+    } catch {
+      return 'I couldn’t find where you are right now. Try again in a moment.'
+    }
+  }, [active, locate, facing])
+
   // A look ahead every few seconds; more often while guiding to a destination.
   const guiding = !!route && !nav?.arrived
   useEffect(() => {
@@ -352,6 +466,11 @@ export function useWalkSession(link: LiveLink) {
     onNavRef.current = fn
   }, [])
 
+  /** Called when the camera, sensor or connection stops or starts working again. Stable across renders. */
+  const onProblem = useCallback((fn: ((news: ProblemNews) => void) | null) => {
+    onProblemRef.current = fn
+  }, [])
+
   /** Called with every alert from a frame, e.g. so Guide mode can speak it. Stable across renders. */
   const onAlert = useCallback((fn: ((a: Alert, trigger: FrameTrigger) => void) | null) => {
     onAlertRef.current = fn
@@ -363,13 +482,13 @@ export function useWalkSession(link: LiveLink) {
   return {
     active, hasCamera, status, lastAlert, urgency, obstacle, startedAt, endedAt, alerts, walked, spotted,
     route, nav,
-    attachVideo, requestMedia, start, end, describe, ask, setRoute, locate, navText,
+    attachVideo, requestMedia, releaseCamera, start, end, describe, ask, setRoute, locate, navText, whereAmI,
     clearObstacle: () => {
       if (obstacle?.danger) dismissedDanger.current = { danger: obstacle.danger, at: Date.now() }
       setObstacle(null)
       setUrgency('low')
     },
-    onAlert, onNav,
+    onAlert, onNav, onProblem,
     /** Mic stream for recording a question (shares the camera's permission prompt when possible). */
     micStream: async () => {
       const audio = stream.current?.getAudioTracks() ?? []

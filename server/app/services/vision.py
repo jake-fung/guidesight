@@ -21,6 +21,14 @@ Return JSON with:
                platform edge, steep bank, cliff, loading dock, missing paving. {{"what": "stairs going
                down", "distance_m": 3}}, distance_m being your best estimate to the first step or edge.
                An ordinary curb is not a drop. If there is a drop, set urgency to "high".
+  "trip":      null, or something low in their walking path they could trip on or that changes the
+               ground level: a ramp going up or down, a single step, a curb, a raised or broken paving
+               slab, a pothole, a cable or hose across the path, a low object on the ground.
+               {{"what": "ramp going down", "distance_m": 2}}. Stairs and drop-offs go in "drop", not
+               here. Upright things (poles, doors, door frames, people, furniture) are NOT trip hazards.
+  "view":      "ok" if you can see the way ahead. "blocked" if the lens is covered, or it's too dark or
+               blurry to see anything. "away" if the camera points at the sky, straight down at the
+               ground or at their body, so the path ahead isn't in the photo.
   "danger":    null, or a few words naming something that means they must stop now even if it is far
                away: a red or don't-walk signal, moving traffic or a vehicle crossing their path, a
                level crossing, an open hole or construction pit. Stairs and drop-offs go in "drop",
@@ -73,6 +81,8 @@ def describe_scene(image: bytes, trigger: str = "stop") -> dict:
             "obstacle": {"what": "pole", "distance_m": 2, "clock": 11},
             "avoid": "right",
             "drop": None,
+            "trip": None,
+            "view": "ok",
             "danger": None,
         }
     return _ask(image, SCENE_PROMPT.format(trigger=TRIGGER_TEXT.get(trigger, trigger)))

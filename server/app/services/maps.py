@@ -1,5 +1,6 @@
 """Google Maps: find a place by name (Places API, New) and a walking route to it (Routes API).
 
+"Where am I?" also uses the Geocoding API (street address); without it, only the nearest place is named.
 Both APIs must be enabled for GOOGLE_MAPS_API_KEY in Google Cloud. A blank key = mock mode: a
 made-up two-step route starting where the walker is, so guiding can be tried indoors.
 """
@@ -7,14 +8,19 @@ import json
 import math
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from ..config import Config
 
 PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
+NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
+GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 # Places near the walker win: look within this radius first.
 SEARCH_RADIUS_M = 5000.0
+# "Where am I?" names a place only if it's this close (metres).
+NEARBY_RADIUS_M = 40.0
 
 PLACE_FIELDS = "places.displayName,places.formattedAddress,places.location"
 ROUTE_FIELDS = ",".join([
@@ -54,6 +60,20 @@ def _post(url: str, body: dict, field_mask: str) -> dict:
         raise MapsError(f"Google Maps error {e.code}: {reason or e.reason}") from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise MapsError("Couldn't reach Google Maps") from e
+
+
+def _get(url: str, params: dict) -> dict:
+    query = urllib.parse.urlencode({**params, "key": Config.GOOGLE_MAPS_API_KEY})
+    try:
+        with urllib.request.urlopen(f"{url}?{query}", timeout=10) as res:
+            data = json.load(res)
+    except urllib.error.HTTPError as e:
+        raise MapsError(f"Google Maps error {e.code}: {e.reason}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise MapsError("Couldn't reach Google Maps") from e
+    if data.get("status") not in ("OK", "ZERO_RESULTS"):
+        raise MapsError(f"Google Maps error: {data.get('error_message') or data.get('status')}")
+    return data
 
 
 def _latlng(p: dict) -> dict:
@@ -153,6 +173,51 @@ def walking_route(origin: dict, destination: dict) -> dict:
         "duration_s": _seconds(route.get("duration")),
         "steps": steps,
     }
+
+
+def _street_address(here: dict) -> str | None:
+    """ "123 Main Street" (or just "Main Street") for a point, from the Geocoding API."""
+    data = _get(GEOCODE_URL, {"latlng": f"{here['lat']},{here['lng']}", "language": "en"})
+    results = data.get("results") or []
+    if not results:
+        return None
+    parts = {t: c["long_name"] for c in results[0].get("address_components", []) for t in c.get("types", [])}
+    if parts.get("route"):
+        return " ".join(p for p in (parts.get("street_number"), parts["route"]) if p)
+    return (results[0].get("formatted_address") or "").split(",")[0].strip() or None
+
+
+def _nearest_place(here: dict) -> str | None:
+    """Name of the closest place (shop, station, park...) within NEARBY_RADIUS_M."""
+    data = _post(NEARBY_URL, {
+        "maxResultCount": 1,
+        "rankPreference": "DISTANCE",
+        "locationRestriction": {"circle": {
+            "center": {"latitude": here["lat"], "longitude": here["lng"]},
+            "radius": NEARBY_RADIUS_M,
+        }},
+    }, "places.displayName")
+    places = data.get("places") or []
+    return ((places[0].get("displayName") or {}).get("text") or None) if places else None
+
+
+def where_am_i(here: dict) -> dict:
+    """{address: "123 Main Street" | None, place: "Tim Hortons" | None} for the walker's position.
+
+    Either lookup may fail on its own (e.g. Geocoding API not enabled); only both failing is an error.
+    """
+    if not enabled():
+        return {"address": "[mock] 100 Queen Street West", "place": "City Hall"}
+    out, errors = {}, []
+    for key, lookup in (("address", _street_address), ("place", _nearest_place)):
+        try:
+            out[key] = lookup(here)
+        except MapsError as e:
+            out[key] = None
+            errors.append(e)
+    if len(errors) == 2:
+        raise errors[0]
+    return out
 
 
 # ---- Mock mode -------------------------------------------------------------------------------

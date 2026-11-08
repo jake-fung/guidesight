@@ -54,17 +54,20 @@ function CameraFeed({ className, demoDetection }: { className?: string; demoDete
   )
 }
 
-const GUIDE_HELP = 'Tap the screen to ask a question, then tap again to send. Double-tap the screen to end the walk.'
+const GUIDE_HELP = 'Tap the screen to ask a question, then tap again to send. Say where am I to hear your location. Double-tap the screen to end the walk.'
 const GUIDE_INTRO = `Sighty is now seeing your surroundings. ${GUIDE_HELP}`
 const ROUTE_HELP = 'Say repeat, how far, or which way at any time.'
 
 type Ask = { phase: 'idle' } | { phase: 'recording' } | { phase: 'sending'; question: string }
   | { phase: 'answered'; question: string; answer: string }
 
+/** "Where am I?" asked out loud: answered from GPS and Google Maps, not the camera. */
+const WHERE_QUESTION = /\bwhere (am i|are we|is this)\b/i
+
 export function D4Guiding() {
   const { go, session, link } = useApp()
   const seconds = useSeconds(session.startedAt, session.active ? null : session.endedAt)
-  const { start, onAlert, onNav, navText, obstacle, route, nav } = session
+  const { start, onAlert, onNav, onProblem, navText, obstacle, route, nav } = session
   const live = useLiveTranscript()
   const [askState, setAsk] = useState<Ask>({ phase: 'idle' })
   // A failed mic goes back to idle (the card shows why).
@@ -72,12 +75,14 @@ export function D4Guiding() {
   // Routine scene updates stay quiet during the intro and while a question is being asked or answered.
   const introPlaying = useRef(true)
   const asking = useRef(false)
-  // Last stairs/drop-off warning, so the quick re-checks don't repeat it every half second.
-  const lastDrop = useRef<{ what: string; at: number } | null>(null)
+  // Last stairs/drop-off/trip warning, so the re-checks don't repeat it every few seconds.
+  const lastHazard = useRef<{ what: string; at: number } | null>(null)
   // True while Sighty says "Listening", before the mic starts (so the word isn't recorded).
   const [preparing, setPreparing] = useState(false)
   /** Bumped on cancel/end, so a mic start still waiting on "Listening" is dropped. */
   const askRun = useRef(0)
+  // Camera/sensor/connection news that came during the intro, said right after it.
+  const heldNews = useRef<string[]>([])
   // Back from the obstacle screen, the walk is already going: say what's next instead of the intro.
   const resumed = useRef(session.active)
 
@@ -89,28 +94,34 @@ export function D4Guiding() {
       : route
         ? `Guiding you to ${destination}. ${navText('start') ?? ''} ${ROUTE_HELP} ${GUIDE_HELP}`
         : GUIDE_INTRO
-    void voice.say(text, { force: true }).then(() => { introPlaying.current = false })
+    void voice.say(text, { force: true }).then(() => {
+      introPlaying.current = false
+      heldNews.current.splice(0).forEach((t) => void announce(t, 3))
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     start()
-    const guiding = !!route
-    // Urgent alerts always speak; routine ones wait while the person is asking something.
-    // While guiding somewhere, "all clear" updates stay quiet so the directions can be heard.
-    // Something in the way (no stop screen unless the harness feels it): say what, how far and how to pass.
-    onAlert((a) => {
-      if (a.drop) {
-        // Stairs or a drop-off, not close enough to stop yet: warn now, then every few seconds.
-        const prev = lastDrop.current
-        if (prev && prev.what === a.drop.what && Date.now() - prev.at < DROP_REPEAT_MS) return
-        lastDrop.current = { what: a.drop.what, at: Date.now() }
-        return void announce(dropWarning(a.drop), 3)
-      }
-      const text = a.obstacle && a.urgency !== 'low' ? cameraWarning(a) : a.speak
-      if (a.urgency === 'high') return void announce(text, 3)
-      if (introPlaying.current || asking.current || (guiding && a.urgency === 'low')) return
-      void announce(text, a.urgency === 'medium' ? 2 : 1)
+    onAlert((a, trigger) => {
+      // "What is ahead?" always gets an answer.
+      if (trigger === 'manual') return void announce(a.obstacle && a.urgency !== 'low' ? cameraWarning(a) : a.speak, 2)
+      // Otherwise only ground hazards speak: stairs, drop-offs and things to trip on (ramps, curbs,
+      // steps). Poles, doors, people and furniture stay silent; the harness sensor stops the walker
+      // if they get close.
+      const hazard = a.drop ?? a.trip
+      if (!hazard) return
+      const prev = lastHazard.current
+      const repeatMs = a.drop ? DROP_REPEAT_MS : TRIP_REPEAT_MS
+      if (prev && prev.what === hazard.what && Date.now() - prev.at < repeatMs) return
+      lastHazard.current = { what: hazard.what, at: Date.now() }
+      void announce(hazardWarning(hazard, a.drop ? 'Slow down.' : 'Watch your step.'), 3)
+    })
+    // The camera, sensor or connection stopped (or started) working: always said, with a buzz when lost.
+    onProblem((p) => {
+      if (p.lost) buzz([300, 100, 300])
+      if (introPlaying.current) heldNews.current.push(p.text)
+      else void announce(p.text, 3)
     })
     // Turns and arriving always speak (over the intro too); the rest wait while a question is asked.
     onNav((e) => {
@@ -120,8 +131,9 @@ export function D4Guiding() {
     return () => {
       onAlert(null)
       onNav(null)
+      onProblem(null)
     }
-  }, [start, onAlert, onNav, route])
+  }, [start, onAlert, onNav, onProblem, route])
 
   // An obstacle from the harness takes over the screen.
   useEffect(() => {
@@ -157,7 +169,7 @@ export function D4Guiding() {
     let answer: string
     try {
       // session.ask sends the question with the camera's current frame.
-      answer = (await session.ask(question)).alert.speak
+      answer = WHERE_QUESTION.test(question) ? await session.whereAmI() : (await session.ask(question)).alert.speak
     } catch (e) {
       answer = `Sorry, I couldn’t answer that: ${errorText(e)}`
     }
@@ -195,6 +207,7 @@ export function D4Guiding() {
       repeat: () => tell('next'),
       'how far': () => tell('far'),
       'which way': () => tell('way'),
+      'where am i': () => void session.whereAmI().then((t) => announce(t, 2)),
     },
     ask.phase === 'idle' || ask.phase === 'answered',
   )
@@ -316,11 +329,13 @@ const AVOID_TIP: Record<Avoid, string> = {
 
 /** How often a stairs/drop-off warning repeats while it's still ahead. */
 const DROP_REPEAT_MS = 4_000
+/** The same trip hazard (ramp, curb…) isn't repeated sooner than this. */
+const TRIP_REPEAT_MS = 20_000
 
-/** "Stairs going down, 3 metres ahead. Slow down." */
-function dropWarning(d: SeenObstacle) {
+/** "Stairs going down, 3 metres ahead. Slow down." / "Ramp going up, 2 metres ahead. Watch your step." */
+function hazardWarning(d: SeenObstacle, tip: string) {
   const what = `${d.what.charAt(0).toUpperCase()}${d.what.slice(1)}`
-  return `${what}, ${d.distance_m !== undefined ? `${nearMetres(d.distance_m)} ahead` : 'ahead'}. Slow down.`
+  return `${what}, ${d.distance_m !== undefined ? `${nearMetres(d.distance_m)} ahead` : 'ahead'}. ${tip}`
 }
 
 /** What's ahead and how to get past it, from the harness distance and the camera's view. */
@@ -433,6 +448,14 @@ export function D6ReadText() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** Back to the live camera, ready for the next Read. */
+  function retake() {
+    buzz(30)
+    setShot(null)
+    setText(null)
+    voice.say('Ready. Point the camera at the text, then tap Read.', { force: true })
+  }
+
   return (
     <Screen>
       <NavHeader title="Read text" onBack={back} />
@@ -457,7 +480,7 @@ export function D6ReadText() {
         {busy ? 'Reading…' : text ?? 'Point the camera at a sign, a menu or a letter, then tap Read.'}
       </p>
       <Gap h={18} />
-      {text && (
+      {shot && text && (
         <div className="flex gap-2">
           <Chip onClick={() => voice.replay()}>Replay</Chip>
           <Chip onClick={() => voice.slower()}>Slower</Chip>
@@ -465,7 +488,8 @@ export function D6ReadText() {
         </div>
       )}
       <Gap h={18} />
-      <Button onClick={() => { setShot(null); read() }} disabled={busy}>{text ? 'Read something else' : 'Read'}</Button>
+      {/* After a read the photo stays up; Take again goes back to the live camera instead of reading straight away. */}
+      {shot ? <Button onClick={retake} disabled={busy}>Take again</Button> : <Button onClick={() => void read()} disabled={busy}>Read</Button>}
     </Screen>
   )
 }

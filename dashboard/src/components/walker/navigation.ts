@@ -410,3 +410,10 @@ export function askCompass() {
   const ask = (globalThis.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined)?.requestPermission
   ask?.call(DeviceOrientationEvent).catch(() => {})
 }
+
+const HEADING_WORDS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
+
+/** Compass bearing → "north", "south-west", ... */
+export function compassWord(bearing: number) {
+  return HEADING_WORDS[Math.round((((bearing % 360) + 360) % 360) / 45) % 8]
+}

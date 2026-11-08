@@ -16,6 +16,10 @@ type Message =
 export type LiveLink = {
   /** null until the server has answered. */
   harnessOnline: boolean | null
+  /** The paired harness id, null when none is paired (or not known yet). */
+  harnessId: string | null
+  /** Whether the live link to the server is up. null while first connecting. */
+  serverOnline: boolean | null
   /** Re-reads harness status, e.g. right after the harness id changes. */
   refresh: () => Promise<void>
   /** Sets the handler for harness events (null to clear). Stable across renders. */
@@ -24,6 +28,8 @@ export type LiveLink = {
 
 export function useLiveLink(): LiveLink {
   const [harnessOnline, setHarnessOnline] = useState<boolean | null>(null)
+  const [harnessId, setHarnessId] = useState<string | null>(null)
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null)
   const onEvent = useRef<((e: HarnessEvent) => void) | null>(null)
 
   useEffect(() => {
@@ -38,12 +44,16 @@ export function useLiveLink(): LiveLink {
       ws = new WebSocket(socketUrl('/live'))
       ws.onopen = () => {
         attempt = 0
+        setServerOnline(true)
         ws?.send(JSON.stringify({ type: 'auth', token }))
       }
       ws.onmessage = (m) => {
         try {
           const msg = JSON.parse(m.data) as Message
-          if (msg.type === 'harness_status') setHarnessOnline(msg.online)
+          if (msg.type === 'harness_status') {
+            setHarnessOnline(msg.online)
+            setHarnessId(msg.harness_id)
+          }
           else if (msg.type === 'harness_event') onEvent.current?.(msg.event)
         } catch {
           // ignore malformed messages
@@ -51,6 +61,7 @@ export function useLiveLink(): LiveLink {
       }
       ws.onclose = () => {
         if (stopped) return
+        setServerOnline(false)
         retryTimer = setTimeout(connect, Math.min(1000 * 2 ** attempt++, MAX_RETRY_MS))
       }
     }
@@ -66,11 +77,13 @@ export function useLiveLink(): LiveLink {
   }, [])
 
   const refresh = useCallback(async () => {
-    setHarnessOnline((await api.harnessStatus()).online)
+    const s = await api.harnessStatus()
+    setHarnessOnline(s.online)
+    setHarnessId(s.harness_id)
   }, [])
   const setEventHandler = useCallback((handler: ((e: HarnessEvent) => void) | null) => {
     onEvent.current = handler
   }, [])
 
-  return { harnessOnline, refresh, setEventHandler }
+  return { harnessOnline, harnessId, serverOnline, refresh, setEventHandler }
 }

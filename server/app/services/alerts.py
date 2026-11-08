@@ -9,6 +9,8 @@ HAPTIC_BY_URGENCY = {"high": "long", "medium": "double", "low": "short"}
 
 
 AVOID = ("left", "right", "stop", "none")
+# Whether the camera can see the way ahead.
+VIEW = ("ok", "blocked", "away")
 
 # Stairs and drop-offs only force the stop screen this close (metres). Further away they're spoken.
 DROP_STOP_M = 1.0
@@ -40,9 +42,9 @@ def _danger(scene: dict) -> str | None:
     return d.strip()[:60]
 
 
-def _drop(scene: dict) -> dict | None:
-    """Stairs or a drop-off the model saw: {what, distance_m?} or None."""
-    d = scene.get("drop")
+def _hazard(scene: dict, key: str) -> dict | None:
+    """A ground hazard the model saw under `key` ("drop" or "trip"): {what, distance_m?} or None."""
+    d = scene.get(key)
     if not isinstance(d, dict) or not str(d.get("what") or "").strip():
         return None
     out = {"what": str(d["what"]).strip()[:40]}
@@ -54,7 +56,8 @@ def _drop(scene: dict) -> dict | None:
 
 
 def build_alert(scene: dict, settings: dict) -> dict:
-    drop = _drop(scene)
+    drop = _hazard(scene, "drop")
+    trip = _hazard(scene, "trip")
     danger = _danger(scene)
     # Stairs and drop-offs are always high urgency, but only a danger (stop screen) when about to
     # reach them. No distance counts as close, to be safe.
@@ -74,6 +77,10 @@ def build_alert(scene: dict, settings: dict) -> dict:
         "avoid": scene.get("avoid") if scene.get("avoid") in AVOID else None,
         # Stairs or a drop-off at any distance; the app watches it more closely as they get near.
         "drop": drop,
+        # Ramps, curbs, single steps, potholes, cables: spoken, but no stop screen.
+        "trip": trip,
+        # The app tells the walker when the camera can't see ahead. Unknown counts as fine.
+        "view": scene.get("view") if scene.get("view") in VIEW else "ok",
         # Stop right away, however far it is (red light, moving traffic), or stairs/a drop within 1 m.
         "danger": danger,
     }
