@@ -1,4 +1,18 @@
-# GuideSight
+<div align="center">
+  <h1 style="font-size:48px; margin-bottom:0;">GuideSight</h1>
+  <h3>Obstacle alerts and spoken guidance for walkers with guide dogs</h3>
+  <br>
+  <img src="https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54"/>
+  <img src="https://img.shields.io/badge/flask-%23000.svg?style=for-the-badge&logo=flask&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Firebase-039BE5?style=for-the-badge&logo=Firebase&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white"/>
+  <img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=C%2B%2B&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Arduino-00979D?style=for-the-badge&logo=Arduino&logoColor=white"/>
+  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
+  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white"/>
+  <img src="https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white"/>
+  <br><br>
+</div>
 
 Assistive walking companion for blind and low-vision people who use guide dogs. An ultrasonic
 sensor on the harness spots obstacles ahead and tells the server over Wi-Fi. The walker's phone snaps
@@ -7,8 +21,30 @@ feels a buzz on the harness handle.
 
 Built for HackCamp 2026.
 
+## Features
+
+- **Obstacle sensing** — ultrasonic sensor on the harness buzzes the handle as things get closer, even offline.
+- **Scene description** — Gemini Vision looks at the phone's camera and describes what's ahead.
+- **Guide mode** — spoken turn-by-turn walking directions via Google Maps.
+- **Ask mode** — voice or typed questions, answered aloud (ElevenLabs, or the phone's built-in voice).
+- **Read mode** — reads text from signs, menus, and buses aloud.
+- **No login** — each phone gets a random device id on first open; no account to set up.
+
+## Built with
+
+- Flask + flask-sock server, Firestore (`firebase-admin`) for storage — optional, falls back to in-memory.
+- `google-genai` (Gemini Vision) for scene description.
+- ElevenLabs for speech-to-text (questions) and text-to-speech (spoken alerts).
+- Google Maps — Places API (New) + Routes API — for walking directions.
+- React + Vite + Tailwind v4 walker web app.
+- ESP32 + HC-SR04 ultrasonic sensor + buzzer firmware.
+
+## Architecture Overview
+
+![Architecture overview](docs/architecture-overview.svg)
+
 ```
- UNO R4 WiFi harness ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore
+ ESP32 harness        ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore
  (HC-SR04, buzzer)   ◀──buzz───┘   ▲     │
                                    │     └──live events──▶ walker web app on the phone (/walk)
                     frames, voice ─┘                        (camera, mic, GPS, speech)
@@ -18,9 +54,17 @@ Built for HackCamp 2026.
 |---------------------|-------------------------------------------------------------------|-------|
 | `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, walking directions, TTS, live harness link | Flask, flask-sock, firebase-admin (Firestore), google-genai, Google Maps (Places + Routes), ElevenLabs |
 | `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Where to?, Guide mode with spoken turn-by-turn directions, Read text, Settings). No login | React, Vite, Tailwind v4 |
-| `firmware/uno_r4/`  | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | Arduino UNO R4 WiFi, ArduinoHttpClient |
+| `firmware/esp32/`   | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | ESP32 Dev Module, ArduinoHttpClient |
 
-## Quick start (mock mode, no API keys)
+## Getting Started
+
+### Prerequisites
+
+- [Python](https://www.python.org/) 3.10+ and pip.
+- [Node.js](https://nodejs.org/) and npm.
+- (optional, for the harness) Arduino IDE.
+
+### Quick start (mock mode, no API keys)
 
 Every external service falls back to canned responses when its key is blank, and data is kept in memory.
 
@@ -51,36 +95,9 @@ Open `https://<random>.trycloudflare.com/walk` on the phone. For a home-screen i
 Add to Home Screen. Keep the page open with the screen on during a walk (it holds a wake lock).
 On iPhones, tap the first screen (**Tap anywhere to start**) yourself: Safari only lets a page speak after a tap.
 
-## Harness (UNO R4 WiFi)
+## Harness (ESP32)
 
-| From | To UNO R4 WiFi |
-|---|---|
-| HC-SR04 VCC / GND | 5V / GND |
-| HC-SR04 TRIG / ECHO | D9 / D10 (no resistors needed, the R4 is 5 V) |
-| Buzzer + / − / S | 3.3V / GND / D8 |
-
-1. Arduino IDE: install the **Arduino UNO R4 Boards** core and the **ArduinoHttpClient** library.
-   On Apple Silicon Macs the board's compiler needs Rosetta: `softwareupdate --install-rosetta --agree-to-license`.
-2. Copy `firmware/uno_r4/arduino_secrets.example.h` to `arduino_secrets.h` and fill in:
-   - **Wi-Fi**: 2.4 GHz only, no username/password networks like eduroam. A phone hotspot works
-     (iPhone: turn on **Maximize Compatibility**).
-   - **Server**: for dev, put the laptop on the same hotspot and use its IP with port `5001` and
-     `SERVER_TLS 0`. For a deployed server or a tunnel, use its host name, port `443`, `SERVER_TLS 1`.
-   - **HARNESS_ID**: something unique, like `gs-7f3k9q`.
-3. Pick "Arduino UNO R4 WiFi" and upload. Serial Monitor at 115200 shows Wi-Fi, server and events.
-   The built-in LED is on while the harness is connected to the server.
-4. In the walker app, open **Settings → Sensor** (or **Enter sensor ID** on the Connect your sensor step), type the
-   same harness ID and tap **Save**, then **Test buzz**.
-
-The harness beeps faster as things get closer even when it's offline. Online, it tells the phone when
-something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
-commands need the server link.
-
-### ESP32 instead of the UNO R4
-
-`firmware/esp32/` is the same firmware for an ESP32 dev board (board **ESP32 Dev Module**, core
-**esp32 by Espressif**, plus **ArduinoHttpClient**). Setup steps are the same, using
-`firmware/esp32/arduino_secrets.example.h`. The blue LED on the board is on while it's connected.
+![Wearable wiring](docs/wearable-wiring.svg)
 
 | From | To ESP32 (pins printed as D5, D18...) |
 |---|---|
@@ -89,6 +106,26 @@ commands need the server link.
 | HC-SR04 ECHO | 1 kΩ → D18, plus 2 kΩ from D18 to GND (ESP32 pins are 3.3 V) |
 | Buzzer + / − / S | 3V3 / GND / D23 |
 | Vibration motor (optional) | D19 → 1 kΩ → 2N2222 base, 1N4148 across the motor |
+
+1. Arduino IDE: install the **esp32 by Espressif** core and the **ArduinoHttpClient** library.
+2. Copy `firmware/esp32/arduino_secrets.example.h` to `arduino_secrets.h` and fill in:
+   - **Wi-Fi**: 2.4 GHz only, no username/password networks like eduroam. A phone hotspot works
+     (iPhone: turn on **Maximize Compatibility**).
+   - **Server**: for dev, put the laptop on the same hotspot and use its IP with port `5001` and
+     `SERVER_TLS 0`. For a deployed server or a tunnel, use its host name, port `443`, `SERVER_TLS 1`.
+   - **HARNESS_ID**: something unique, like `gs-7f3k9q`.
+3. Pick "ESP32 Dev Module" and upload. Serial Monitor at 115200 shows Wi-Fi, server and events.
+   The blue LED on the board is on while it's connected to the server.
+4. In the walker app, open **Settings → Sensor** (or **Enter sensor ID** on the Connect your sensor step), type the
+   same harness ID and tap **Save**, then **Test buzz**.
+
+The harness beeps faster as things get closer even when it's offline. Online, it tells the phone when
+something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
+commands need the server link.
+
+### How to wear it
+
+![How to wear it](docs/how-to-wear.svg)
 
 ## Going live
 
@@ -185,6 +222,6 @@ users/{uid}/walks/{walkId}/events/{eventId}  { type: obstacle|stop|pull|alert|qu
 
 ## Main TODOs
 
-- Calibrate `OBSTACLE_CM` / `CLEAR_CM` in `firmware/uno_r4/uno_r4.ino` on a real harness.
-- Hands-free voice (wake word / voice activity detection) instead of tap-to-ask.
-- Background operation: keep the walk running with the screen locked.
+- [ ] Calibrate `OBSTACLE_CM` / `CLEAR_CM` in `firmware/esp32/esp32.ino` on a real harness.
+- [ ] Hands-free voice (wake word / voice activity detection) instead of tap-to-ask.
+- [ ] Background operation: keep the walk running with the screen locked.
