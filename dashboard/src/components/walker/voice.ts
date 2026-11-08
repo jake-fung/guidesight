@@ -57,6 +57,14 @@ const MAX_CLIPS = 30
 const synth = () => (typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null)
 const audio = () => (player ??= new Audio())
 
+/** One AudioContext for mic volume checks. iPhones only let it run once it's resumed inside a tap. */
+let sharedCtx: AudioContext | null = null
+export function audioContext(): AudioContext | null {
+  if (sharedCtx) return sharedCtx
+  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  return Ctx ? (sharedCtx = new Ctx()) : null
+}
+
 /** Highlights captions up to the end of the word at char `at`. */
 function spokenUpTo(text: string, at: number) {
   const end = text.indexOf(' ', at)
@@ -166,6 +174,7 @@ export const voice = {
     const el = audio()
     el.src = SILENCE
     el.play().catch(() => {})
+    audioContext()?.resume().catch(() => {})
     const s = synth()
     if (!s) return
     const u = new SpeechSynthesisUtterance(' ')
@@ -257,6 +266,16 @@ export const voice = {
   },
 }
 
+// Phones only allow sound after a tap. A0 unlocks it, but a reload (or a link straight to a screen)
+// skips A0, so the first tap anywhere unlocks it too.
+if (typeof document !== 'undefined') {
+  const unlockOnTap = () => {
+    if (!unlocked) voice.unlock()
+    document.removeEventListener('pointerdown', unlockOnTap, true)
+  }
+  document.addEventListener('pointerdown', unlockOnTap, true)
+}
+
 export function useSpeech() {
   return useSyncExternalStore(voice.subscribe, voice.get, voice.get)
 }
@@ -292,9 +311,9 @@ type Recognition = {
   stop: () => void
   abort: () => void
 }
-type RecognitionCtor = new () => Recognition
+export type RecognitionCtor = new () => Recognition
 
-const Recognition: RecognitionCtor | undefined =
+export const Recognition: RecognitionCtor | undefined =
   typeof window === 'undefined'
     ? undefined
     : ((window as unknown as { SpeechRecognition?: RecognitionCtor }).SpeechRecognition ??
@@ -391,12 +410,12 @@ export function useListen(active: boolean, onFinal: (text: string) => void, opts
 /**
  * Calls onPause once someone has spoken and then gone quiet for `silenceMs`, judged from the mic's
  * volume alone, so it works in browsers whose speech recognition is missing or failing.
- * Also calls it after `maxMs` no matter what. Returns a function that stops watching.
+ * Also calls it after `maxMs` no matter what. onPause gets whether anyone spoke (true when the
+ * volume couldn't be read, e.g. audio is still locked). Returns a function that stops watching.
  */
-export function watchForPause(stream: MediaStream, onPause: () => void, { silenceMs = 1500, maxMs = 30_000 } = {}) {
-  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!Ctx) return () => {}
-  const ctx = new Ctx()
+export function watchForPause(stream: MediaStream, onPause: (spoke: boolean) => void, { silenceMs = 1500, maxMs = 30_000 } = {}) {
+  const ctx = audioContext()
+  if (!ctx) return () => {}
   ctx.resume().catch(() => {})
   const source = ctx.createMediaStreamSource(stream)
   const analyser = ctx.createAnalyser()
@@ -427,24 +446,120 @@ export function watchForPause(stream: MediaStream, onPause: () => void, { silenc
     } else loudFrames = 0
     if ((spoke && now - lastSpeech > silenceMs) || now - started > maxMs) {
       stop()
-      onPause()
+      onPause(spoke || ctx.state !== 'running')
     }
   }, FRAME_MS)
 
   function stop() {
     clearInterval(timer)
     source.disconnect()
-    ctx.close().catch(() => {})
   }
   return stop
 }
 
+const canRecord =
+  typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+
+/**
+ * Listens while `active` (and while Sighty isn't talking) by recording one phrase at a time and
+ * sending it to the server's speech-to-text (ElevenLabs). Works on iPhones, where the browser's own
+ * recogniser misses most phrases. `off` turns true when the server has no speech-to-text set up.
+ */
+export function usePhraseListen(active: boolean, onText: (text: string) => void, { silenceMs = 700, maxMs = 6000 } = {}) {
+  const speech = useSpeech()
+  const talking = speech.status === 'speaking'
+  const [listening, setListening] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [off, setOff] = useState(!canRecord)
+  const cb = useRef(onText)
+  useEffect(() => {
+    cb.current = onText
+  })
+
+  useEffect(() => {
+    // Mic off while Sighty talks, so it doesn't hear itself (and iPhones keep playing on the speaker).
+    if (!active || talking || off) return
+    let stopped = false
+    let stream: MediaStream | null = null
+    let rec: MediaRecorder | null = null
+    let stopWatching = () => {}
+    const aborter = new AbortController()
+
+    const record = () => {
+      if (stopped || !stream) return
+      const r = new MediaRecorder(stream)
+      const chunks: Blob[] = []
+      let spoke = false
+      rec = r
+      r.ondataavailable = (e) => e.data.size && chunks.push(e.data)
+      r.onstop = () => {
+        if (stopped) return
+        record() // keep listening while this phrase is transcribed
+        const clip = new Blob(chunks, { type: r.mimeType || 'audio/mp4' })
+        if (!spoke || !clip.size) return
+        api.transcribe(clip, aborter.signal)
+          .then((text) => !stopped && text && cb.current(text))
+          .catch((e) => {
+            if (stopped) return
+            if (e instanceof ApiError && e.status === 503) setOff(true)
+            else console.warn('[listen] speech-to-text failed:', e)
+          })
+      }
+      r.start()
+      stopWatching = watchForPause(stream, (s) => {
+        spoke = s
+        if (r.state !== 'inactive') r.stop()
+      }, { silenceMs, maxMs })
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((s) => {
+        if (stopped) return s.getTracks().forEach((t) => t.stop())
+        stream = s
+        setError(null)
+        setListening(true)
+        record()
+      })
+      .catch((e) => {
+        if (stopped) return
+        console.warn('[listen] no microphone:', e)
+        setError(e?.name === 'NotAllowedError' ? 'Microphone access is blocked for this site.' : 'No microphone was found.')
+      })
+
+    return () => {
+      stopped = true
+      aborter.abort()
+      stopWatching()
+      if (rec && rec.state !== 'inactive') rec.stop()
+      stream?.getTracks().forEach((t) => t.stop())
+      setListening(false)
+    }
+  }, [active, talking, off, silenceMs, maxMs])
+
+  return { listening, error, off }
+}
+
+/**
+ * Hears whole phrases: the server's speech-to-text, or the browser's recogniser when the server
+ * can't. `interim` (live words) only comes from the browser's recogniser.
+ * Short commands suit the default 0.7 s pause; give dictation (emails) longer.
+ */
+export function usePhrases(active: boolean, onText: (text: string) => void, opts: { silenceMs?: number; maxMs?: number } = {}) {
+  const server = usePhraseListen(active, onText, opts)
+  const browser = useListen(active && server.off, onText)
+  return server.off
+    ? { listening: browser.listening, error: browser.error, interim: browser.heard.interim }
+    : { listening: server.listening, error: server.error, interim: '' }
+}
+
+/** Lowercase words only, so "Low-vision." matches "low vision". */
+const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim()
+
 /** Calls the matching handler when a phrase contains one of the keys (case-insensitive). */
 export function useVoiceCommands(commands: Record<string, () => void>, active = true) {
-  const keys = Object.keys(commands)
-  return useListen(active, (text) => {
-    const t = text.toLowerCase()
-    const key = keys.find((k) => t.includes(k.toLowerCase()))
+  return usePhrases(active, (text) => {
+    const t = ` ${words(text)} `
+    const key = Object.keys(commands).find((k) => t.includes(` ${words(k)} `))
     if (key) commands[key]()
   })
 }

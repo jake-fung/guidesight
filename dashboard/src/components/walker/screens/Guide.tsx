@@ -1,12 +1,12 @@
 // D4 Guiding · D5 Obstacle alert · D6 Read text · D7 Settings · D8 Trip summary
 import { useEffect, useRef, useState } from 'react'
-import { logout } from '../../../lib/auth'
 import { DEMO } from '../demo'
 import { HarnessPairing } from '../Pairing'
 import { icons } from '../icons'
 import { errorText, grabFrame } from '../session'
 import { useApp } from '../state'
-import { ActionBar, Button, Chip, Gap, Hero, ListRow, Mascot, NavHeader, Screen, StatTile, Toggle, cx } from '../ui'
+import { ActionBar, Button, Chip, Gap, Hero, ListRow, Mascot, NavHeader, Screen, StatTile, Toggle, VoiceBars, cx } from '../ui'
+import { useLiveTranscript } from '../transcribe'
 import { buzz, spellOut, useAutoRead, useVoiceCommands, voice } from '../voice'
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -43,14 +43,34 @@ function CameraFeed({ className, demoDetection }: { className?: string; demoDete
   )
 }
 
+const GUIDE_INTRO = 'Sighty is now seeing your surroundings. Tap the screen to ask a question, then tap again to send.'
+
+type Ask = { phase: 'idle' } | { phase: 'recording' } | { phase: 'sending'; question: string }
+  | { phase: 'answered'; question: string; answer: string }
+
 export function D4Guiding() {
   const { go, session, link } = useApp()
   const seconds = useSeconds(session.startedAt, session.active ? null : session.endedAt)
   const { start, onAlert, obstacle } = session
+  const live = useLiveTranscript()
+  const [askState, setAsk] = useState<Ask>({ phase: 'idle' })
+  // A failed mic goes back to idle (the card shows why).
+  const ask: Ask = askState.phase === 'recording' && live.error ? { phase: 'idle' } : askState
+  // Routine scene updates stay quiet during the intro and while a question is being asked or answered.
+  const introPlaying = useRef(true)
+  const asking = useRef(false)
+
+  useEffect(() => {
+    introPlaying.current = true
+    void voice.say(GUIDE_INTRO, { force: true }).then(() => { introPlaying.current = false })
+  }, [])
 
   useEffect(() => {
     start()
-    onAlert((a) => voice.say(a.speak, { force: true }))
+    // Urgent alerts always speak; routine ones wait while the person is asking something.
+    onAlert((a) => {
+      if (!(introPlaying.current || asking.current) || a.urgency === 'high') voice.say(a.speak, { force: true })
+    })
     return () => onAlert(null)
   }, [start, onAlert])
 
@@ -62,9 +82,57 @@ export function D4Guiding() {
     }
   }, [obstacle, go])
 
-  useVoiceCommands({ 'hey sighty': () => go('d2'), 'what is ahead': () => session.describe('manual'), 'end walk': () => end() })
+  function startAsking() {
+    asking.current = true
+    voice.stop()
+    buzz(30)
+    setAsk({ phase: 'recording' })
+    live.start()
+  }
+
+  async function send() {
+    buzz(40)
+    const question = (await live.finish()).trim()
+    if (!question) {
+      setAsk({ phase: 'idle' })
+      asking.current = false
+      voice.say('I didn’t catch that. Tap the screen to try again.', { force: true })
+      return
+    }
+    setAsk({ phase: 'sending', question })
+    voice.say('Let me look.', { force: true })
+    let answer: string
+    try {
+      // session.ask sends the question with the camera's current frame.
+      answer = (await session.ask(question)).alert.speak
+    } catch (e) {
+      answer = `Sorry, I couldn’t answer that: ${errorText(e)}`
+    }
+    setAsk({ phase: 'answered', question, answer })
+    await voice.say(answer, { force: true })
+    asking.current = false
+  }
+
+  function cancel() {
+    live.cancel()
+    setAsk({ phase: 'idle' })
+    asking.current = false
+  }
+
+  /** The whole screen is the tap target: first tap records, second tap sends. */
+  function tap() {
+    if (ask.phase === 'recording') {
+      if (!live.starting) void send()
+    } else if (ask.phase !== 'sending') startAsking()
+  }
+
+  useVoiceCommands(
+    { 'hey sighty': startAsking, 'what is ahead': () => session.describe('manual'), 'end walk': () => end() },
+    ask.phase === 'idle' || ask.phase === 'answered',
+  )
 
   async function end() {
+    live.cancel()
     voice.stop()
     await session.end()
     go('d8')
@@ -76,29 +144,61 @@ export function D4Guiding() {
 
   return (
     <Screen>
-      <div className="flex shrink-0 flex-col gap-0.5">
-        <p className="t-overline text-gs-muted">Guiding</p>
-        <h1 className="t-title-l">{DEMO ? 'Walking to the bench' : 'Guide mode'}</h1>
-      </div>
-      <Gap h={14} />
-      <CameraFeed demoDetection={DEMO} />
-      <Gap h={14} />
-      <div className="flex shrink-0 gap-2.5">
-        <StatTile tone="blue" label="Path" value={obstacle ? 'Stop' : 'Clear'} />
-        {DEMO ? <StatTile tone="yellow" label="Bench" value="3 m" /> : (
-          <StatTile tone="yellow" label="Harness" value={link.harnessOnline ? 'On' : 'Off'} />
+      <div className="flex min-h-0 flex-1 cursor-pointer select-none flex-col" onClick={tap}>
+        <div className="flex shrink-0 flex-col gap-0.5">
+          <p className="t-overline text-gs-muted">Guiding</p>
+          <h1 className="t-title-l">{DEMO ? 'Walking to the bench' : 'Guide mode'}</h1>
+        </div>
+        <Gap h={14} />
+        <CameraFeed demoDetection={DEMO} />
+        <Gap h={14} />
+        <div className="flex shrink-0 gap-2.5">
+          <StatTile tone="blue" label="Path" value={obstacle ? 'Stop' : 'Clear'} />
+          {DEMO ? <StatTile tone="yellow" label="Bench" value="3 m" /> : (
+            <StatTile tone="yellow" label="Harness" value={link.harnessOnline ? 'On' : 'Off'} />
+          )}
+          <StatTile tone="green" label="Time" value={DEMO ? '0:42' : clock(seconds)} />
+        </div>
+        <Gap h={14} />
+        {ask.phase === 'recording' ? (
+          <section className="flex shrink-0 flex-col gap-2 rounded-[22px] border-2 border-dashed border-gs-action bg-gs-surface p-4" role="status">
+            <p className="t-caption flex items-center gap-2 text-gs-stop">
+              <span className="size-2 rounded-full bg-gs-stop" />
+              <span className="flex-1">{live.starting ? 'Starting the microphone…' : 'Listening… tap anywhere to send'}</span>
+              <VoiceBars heights={[6, 12, 18, 10, 16, 8, 14, 6]} width={3} gap={3} color="bg-gs-action" active={!live.starting} />
+            </p>
+            <p className={cx('t-title-m break-words', !live.text && 'text-gs-muted')}>
+              {live.text || (live.live === false ? 'Speak now. Your words show up when you send.' : 'Ask me anything about what’s ahead')}
+            </p>
+          </section>
+        ) : (
+          <section className="flex shrink-0 flex-col gap-2.5 rounded-[22px] border-2 border-gs-line bg-gs-surface p-4" aria-live="polite">
+            {(ask.phase === 'sending' || ask.phase === 'answered') && (
+              <p className="t-body-m text-gs-muted"><span className="sr-only">You asked: </span>“{ask.question}”</p>
+            )}
+            <p className="t-caption flex items-center gap-2 text-gs-muted"><img src={icons.volume18Black} alt="" className="size-[18px]" />Sighty says</p>
+            <p className="t-title-m" role={live.error && ask.phase === 'idle' ? 'alert' : undefined}>
+              {ask.phase === 'sending' ? 'Let me look…'
+                : ask.phase === 'answered' ? ask.answer
+                : live.error ?? narration}
+            </p>
+          </section>
         )}
-        <StatTile tone="green" label="Time" value={DEMO ? '0:42' : clock(seconds)} />
-      </div>
-      <Gap h={14} />
-      <section className="flex shrink-0 flex-col gap-2.5 rounded-[22px] border-2 border-gs-line bg-gs-surface p-4" aria-live="polite">
-        <p className="t-caption flex items-center gap-2 text-gs-muted"><img src={icons.volume18Black} alt="" className="size-[18px]" />Sighty says</p>
-        <p className="t-title-m">{narration}</p>
-      </section>
-      <Gap h={14} />
-      <div className="flex shrink-0 gap-2.5">
-        <Button variant="secondary" className="flex-1" onClick={end}>End</Button>
-        <Button className="flex-1" onClick={() => go('d2')}>Speak</Button>
+        <Gap h={14} />
+        <div className="flex shrink-0 gap-2.5">
+          {ask.phase === 'recording' ? (
+            <>
+              <Button variant="secondary" className="flex-1" onClick={(e) => { e.stopPropagation(); cancel() }}>Cancel</Button>
+              {/* No handler: the tap reaches the screen, which sends. */}
+              <Button className="flex-1">Send</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="secondary" className="flex-1" onClick={(e) => { e.stopPropagation(); void end() }}>End</Button>
+              <Button className="flex-1" disabled={ask.phase === 'sending'}>{ask.phase === 'sending' ? 'Asking…' : 'Speak'}</Button>
+            </>
+          )}
+        </div>
       </div>
     </Screen>
   )
@@ -242,9 +342,9 @@ export function D7Settings() {
   const sizeIndex = Math.max(0, TEXT_SIZES.findIndex((s) => s.v >= prefs.textSize))
   const language = new Intl.DisplayNames([navigator.language], { type: 'language' }).of(navigator.language) ?? 'English'
 
-  async function signOut() {
-    await logout().catch(() => {})
-    setProfile({ signedIn: false })
+  /** Forgets the name, email and setup on this phone, then starts setup again. */
+  function startOver() {
+    setProfile({ name: '', email: '', track: null, signedIn: false })
     go('a0')
   }
 
@@ -297,7 +397,7 @@ export function D7Settings() {
             <p className="t-label-l">{profile.name || 'Guest'}</p>
             {profile.email && <p className="t-label-m truncate font-normal text-gs-muted">{profile.email}</p>}
           </div>
-          <button type="button" onClick={signOut} className="t-label-m">Sign out</button>
+          <button type="button" onClick={startOver} className="t-label-m">Start over</button>
         </div>
       </Card>
     </Screen>

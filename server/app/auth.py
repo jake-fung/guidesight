@@ -1,48 +1,21 @@
-"""Verifies the Auth0 access token the web app sends as `Authorization: Bearer <token>`.
+"""Who is calling: each phone or browser makes a random device id on first open and sends it as
+`Authorization: Bearer <device id>`. That id is the user id. There is no login.
 
-The token is a JWT signed by the Auth0 tenant (RS256) for this API's audience. The user id
-is its `sub` claim, for example "auth0|65f0c...".
+Anyone who knows a device id can act as that device, so treat ids like passwords (they're random
+and never shown in the app).
 """
+import re
 from functools import wraps
 
-import jwt
-from flask import current_app, g, jsonify, request
+from flask import g, jsonify, request
 
-from .config import Config
-
-DEV_UID = "dev-user"
-
-_jwks: jwt.PyJWKClient | None = None
-
-
-def _signing_keys() -> jwt.PyJWKClient:
-    global _jwks
-    if _jwks is None:
-        # Caches the tenant's public keys and refetches them when Auth0 rotates keys.
-        _jwks = jwt.PyJWKClient(f"https://{Config.AUTH0_DOMAIN}/.well-known/jwks.json", cache_keys=True)
-    return _jwks
-
-
-def verify_auth0_token(token: str) -> str | None:
-    try:
-        key = _signing_keys().get_signing_key_from_jwt(token).key
-        claims = jwt.decode(
-            token,
-            key,
-            algorithms=["RS256"],
-            audience=Config.AUTH0_AUDIENCE,
-            issuer=f"https://{Config.AUTH0_DOMAIN}/",
-        )
-        return claims["sub"]
-    except (jwt.PyJWTError, KeyError):  # invalid, expired, wrong tenant or audience
-        return None
+# Long enough to be unguessable from the app (a UUID), short enough to be a Firestore document id.
+_DEVICE_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 def verify_token(token: str) -> str | None:
-    if current_app.config.get("TESTING") or not Config.auth_enabled():
-        # Mock mode: accept any token so the app works before Auth0 is set up.
-        return DEV_UID if token else None
-    return verify_auth0_token(token)
+    """The user id for a device id, or None if it isn't one."""
+    return token if _DEVICE_ID.fullmatch(token or "") else None
 
 
 def require_auth(fn):

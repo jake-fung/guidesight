@@ -8,7 +8,7 @@ feels a buzz on the harness handle.
 Built for HackCamp 2026.
 
 ```
- UNO R4 WiFi harness ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore / Auth0
+ UNO R4 WiFi harness ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore
  (HC-SR04, buzzer)   ◀──buzz───┘   ▲     │
                                    │     └──live events──▶ walker web app on the phone (/walk)
                     frames, voice ─┘                        (camera, mic, GPS, speech)
@@ -16,8 +16,8 @@ Built for HackCamp 2026.
 
 | Folder              | What                                                              | Stack |
 |---------------------|-------------------------------------------------------------------|-------|
-| `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, TTS, live harness link | Flask, flask-sock, PyJWT (Auth0), firebase-admin (Firestore), google-genai, ElevenLabs |
-| `dashboard/`        | Walker web app: Auth0 login → first-run setup → walker app (Home, Guide mode, Ask, Read text, Settings) | React, Vite, Tailwind v4, Auth0 SPA SDK |
+| `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, TTS, live harness link | Flask, flask-sock, firebase-admin (Firestore), google-genai, ElevenLabs |
+| `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Guide mode, Ask, Read text, Settings). No login | React, Vite, Tailwind v4 |
 | `firmware/uno_r4/`  | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | Arduino UNO R4 WiFi, ArduinoHttpClient |
 
 ## Quick start (mock mode, no API keys)
@@ -77,36 +77,25 @@ commands need the server link.
 
 ## Going live
 
-1. **Auth0** (login):
-   - **APIs → Create API**. Pick an identifier such as `https://api.guidesight.app` (it's only a name,
-     nothing is served there). Signing algorithm RS256.
-   - **Applications → Create Application → Single Page Application**. Under Settings:
-     - Allowed Callback URLs, Allowed Logout URLs and Allowed Web Origins: `http://localhost:5173`
-       plus your tunnel or deployed URL (for quick tunnels, `https://*.trycloudflare.com`; if Auth0
-       won't take the wildcard, add the exact URL each time it changes).
-     - Turn on **Refresh Token Rotation**. The app uses refresh tokens so Safari keeps people signed in.
-   - Optional, recommended for blind users: turn on **passkeys** (Face ID / Touch ID instead of typing a
-     password) under Authentication → Database → your connection → Authentication Methods.
-   - `dashboard/.env`: `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE` (the API identifier).
-   - `server/.env`: `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` (same values). The server then checks access
-     tokens.
-2. **Firestore** (storage): create a Firebase project with Firestore, download a service-account JSON
+1. **Firestore** (storage): create a Firebase project with Firestore, download a service-account JSON
    (Project settings → Service accounts) and set `GOOGLE_APPLICATION_CREDENTIALS` to its path.
-   Blank = in-memory storage. Login and storage turn on separately.
-3. **Harness key**: set `HARNESS_KEY` in `server/.env` and the same value in `arduino_secrets.h`.
-   With Auth0 on, harnesses can't connect without it.
-4. **Gemini**: set `GEMINI_API_KEY`. `GEMINI_MODEL` defaults to `gemini-flash-latest`.
-5. **ElevenLabs** (speech-to-text for questions, text-to-speech for spoken alerts): set `ELEVENLABS_API_KEY`.
+   Blank = in-memory storage.
+2. **Harness key**: set `HARNESS_KEY` in `server/.env` and the same value in `arduino_secrets.h`.
+   Blank = any harness may connect.
+3. **Gemini**: set `GEMINI_API_KEY`. `GEMINI_MODEL` defaults to `gemini-flash-latest`.
+4. **ElevenLabs** (speech-to-text for questions, text-to-speech for spoken alerts): set `ELEVENLABS_API_KEY`.
    `ELEVENLABS_STT_MODEL` defaults to `scribe_v2`, `ELEVENLABS_TTS_MODEL` to `eleven_flash_v2_5`, and
    `ELEVENLABS_VOICE_ID` to a premade voice. Without a key, the app speaks with the phone's built-in voice.
-6. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
+5. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
    `index.html` so `/walk` loads. If the server is on another host, set `VITE_API_URL` and add the web
    app's origin to `CORS_ORIGINS`. Run the server as a **single process** with threads (for example
    `gunicorn -w 1 --threads 32`): live connections are kept in memory.
 
 ## API
 
-All routes need `Authorization: Bearer <Auth0 access token>` (any token in mock mode).
+There is no login. Each phone makes a random device id on first open (`dashboard/src/lib/device.ts`)
+and every route needs `Authorization: Bearer <device id>`; that id is the user id. Ids are 8–64
+letters, digits, `-` or `_`. Clearing the site's data on the phone starts over as a new user.
 
 | Method & path                         | Body                                              | Returns                         |
 |---------------------------------------|---------------------------------------------------|---------------------------------|
@@ -129,10 +118,9 @@ All routes need `Authorization: Bearer <Auth0 access token>` (any token in mock 
 
 Errors come back as `{error: "<reason>"}`.
 
-### Sign-up and first-run setup
+### First-run setup
 
-Sign-up itself (email + one-time code) happens on Auth0's hosted page. After it, the app calls
-`GET /api/me` and shows the screen named by `next_step`:
+The server tracks setup progress per user. `GET /api/me` returns `next_step`, the step still to do:
 
 | `next_step`  | Screen                                   | Answered with |
 |--------------|------------------------------------------|---------------|
@@ -145,7 +133,7 @@ Sign-up itself (email + one-time code) happens on Auth0's hosted page. After it,
 
 Camera and microphone permissions live in the browser; the server only records the answer so setup
 resumes where it left off. `nearby` lists switched-on sensors no one has paired yet, ones on the same
-network as the phone first. Any signed-in user can pair an unpaired sensor; a paired one can't be taken.
+network as the phone first. Any user can pair an unpaired sensor; a paired one can't be taken.
 
 Settings also hold the accessibility options: `text_size` (`default`|`large`|`extra_large`),
 `high_contrast`, `read_screen_aloud`, `zoom`, `voice_control`, plus `speech_rate` (0.5–2.0) and
@@ -163,7 +151,7 @@ Defined in `server/app/live.py`. The first message on each socket authenticates 
     and `ping` every 15 s
   - server → harness: `short` | `double` | `long` (buzz), or `pong`
 - `/api/live` (walker app):
-  - phone → server: `{"type":"auth","token":"<Auth0 access token>"}`, then `ping` every 25 s
+  - phone → server: `{"type":"auth","token":"<device id>"}`, then `ping` every 25 s
   - server → phone: `{"type":"harness_event","event":{...}}` and `{"type":"harness_status","online":true}`
 
 A harness belongs to the user whose settings have its `harness_id`.
@@ -171,7 +159,7 @@ A harness belongs to the user whose settings have its `harness_id`.
 ## Firestore layout
 
 ```
-users/{uid}                                  { profile, setup, settings }   uid = Auth0 user id (`sub`)
+users/{uid}                                  { profile, setup, settings }   uid = device id
 users/{uid}/walks/{walkId}                   { started_at, ended_at, stop_count, pull_count }
 users/{uid}/walks/{walkId}/events/{eventId}  { type: obstacle|stop|pull|alert|question, at, location, ... }
 ```

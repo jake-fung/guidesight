@@ -41,7 +41,7 @@ def get_me():
 @bp.put("")
 @require_auth
 def update_profile():
-    """{name?, email?}. Email is display-only (Settings > Account); sign-in is Auth0's job."""
+    """{name?, email?}. Email is display-only (Settings > Account); there is no sign-in."""
     body = request.get_json(force=True) or {}
     changes = {}
     if "name" in body:

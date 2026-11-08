@@ -1,4 +1,4 @@
-import { getToken } from './auth'
+import { getToken } from './device'
 
 /** Blank = same origin. In dev, Vite proxies /api to the Flask server (vite.config.ts). */
 export const API_URL = import.meta.env.VITE_API_URL ?? ''
@@ -117,6 +117,16 @@ export const api = {
     }
     return request<{ transcript: string; alert: Alert }>(`/walks/${walkId}/voice`, { method: 'POST', body: form })
   },
+
+  /** One spoken phrase as text (ElevenLabs Scribe). 503 = the server has no ElevenLabs key. */
+  transcribe: (audio: Blob, signal?: AbortSignal) => {
+    const form = new FormData()
+    form.append('audio', audio, `phrase.${audio.type.includes('mp4') ? 'm4a' : 'webm'}`)
+    return request<{ transcript: string }>('/stt', { method: 'POST', body: form, signal }).then((r) => r.transcript)
+  },
+
+  /** Single-use token for streaming the mic to ElevenLabs Scribe realtime (live words). 503 = no key. */
+  sttToken: () => post<{ token: string; model_id: string }>('/stt/token'),
 
   /** Alert text as an MP3 clip in the ElevenLabs voice. 503 = the server has no ElevenLabs key. */
   speech: (text: string, speed: number, signal?: AbortSignal) =>

@@ -2,7 +2,7 @@
 
 Both keep a WebSocket open to the server. The first message on each socket authenticates it:
     harness -> server:  {"type": "hello", "id": "<harness id>", "key": "<HARNESS_KEY>"}
-    phone   -> server:  {"type": "auth", "token": "<Auth0 access token>"}
+    phone   -> server:  {"type": "auth", "token": "<device id>"}
 
 After that:
     harness -> server:  {"type": "obstacle", "cm": 85}  (or "stop"/"pull" with "accel"), or "ping"
@@ -141,8 +141,7 @@ def _status(harness_id: str | None, online: bool) -> dict:
 def _harness_key_ok(key: str) -> bool:
     if Config.HARNESS_KEY:
         return hmac.compare_digest(key.encode(), Config.HARNESS_KEY.encode())
-    # No key configured: fine in mock mode, refused once real logins are on.
-    return not Config.auth_enabled()
+    return True  # no key configured: any harness may connect
 
 
 def _first_message(ws) -> dict:

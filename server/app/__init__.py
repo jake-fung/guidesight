@@ -22,6 +22,7 @@ def create_app(testing: bool = False) -> Flask:
     from .routes.setup import bp as setup_bp
     from .routes.walks import bp as walks_bp
     from .routes.tts import bp as tts_bp
+    from .routes.stt import bp as stt_bp
 
     app.register_blueprint(me_bp, url_prefix="/api/me")
     app.register_blueprint(setup_bp, url_prefix="/api/setup")
@@ -29,6 +30,7 @@ def create_app(testing: bool = False) -> Flask:
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(harness_bp, url_prefix="/api/harness")
     app.register_blueprint(tts_bp, url_prefix="/api/tts")
+    app.register_blueprint(stt_bp, url_prefix="/api/stt")
 
     @app.errorhandler(HTTPException)
     def json_error(e):
@@ -39,7 +41,6 @@ def create_app(testing: bool = False) -> Flask:
     def health():
         return jsonify(
             status="ok",
-            auth0=Config.auth_enabled(),
             firestore=Config.firestore_enabled(),
             gemini=bool(Config.GEMINI_API_KEY),
             elevenlabs=bool(Config.ELEVENLABS_API_KEY),

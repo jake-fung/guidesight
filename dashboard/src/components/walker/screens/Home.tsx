@@ -4,7 +4,8 @@ import { icons } from '../icons'
 import { useApp, type Exchange } from '../state'
 import { errorText } from '../session'
 import { Button, Chip, Gap, Mascot, NavHeader, Screen, Toggle, VoiceBars, cx } from '../ui'
-import { canListen, useAutoRead, useListen, voice, watchForPause } from '../voice'
+import { useLiveTranscript } from '../transcribe'
+import { useAutoRead, voice } from '../voice'
 
 function greeting() {
   const h = new Date().getHours()
@@ -112,105 +113,78 @@ function useAsk() {
   }
 }
 
+/** A pause this long after some words sends the question ("or just pause"). */
+const PAUSE_SENDS_MS = 1600
+
 export function D2Listening() {
-  const { back, go, session } = useApp()
+  const { back, go } = useApp()
   const ask = useAsk()
-  const recorder = useRef<MediaRecorder | null>(null)
-  const chunks = useRef<Blob[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const finished = useRef(false)
-  // finish() as of the latest render, for the pause detector set up once in the effect below.
-  const finishRef = useRef<() => void>(() => {})
+  const live = useLiveTranscript()
+  const [note, setNote] = useState<string | null>(null)
+  const sending = useRef(false)
 
+  // Listen as soon as the screen opens (Sighty stops talking first, so it isn't recorded).
+  const { start } = live
   useEffect(() => {
-    voice.stop() // don't record Sighty talking
-    let rec: MediaRecorder | null = null
-    let cancelled = false
-    let stopWatching = () => {}
-    session.micStream()
-      .then((stream) => {
-        if (cancelled) return stream.getTracks().forEach((t) => t.stop()) // left the screen first
-        if (typeof MediaRecorder === 'undefined') return
-        rec = new MediaRecorder(stream)
-        chunks.current = []
-        rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data)
-        rec.start()
-        recorder.current = rec
-        // Send the question when the person stops talking ("or just pause").
-        stopWatching = watchForPause(stream, () => finishRef.current())
-      })
-      .catch((e) => setError(`Microphone not available: ${errorText(e)}`))
-    return () => {
-      cancelled = true
-      stopWatching()
-      if (rec && rec.state !== 'inactive') rec.stop()
-      rec?.stream.getTracks().forEach((t) => t.stop())
-    }
-  }, [session])
+    voice.stop()
+    start()
+  }, [start])
 
-  const latest = useRef('')
-
-  async function finish(text = latest.current) {
-    if (finished.current) return
-    finished.current = true
-    const rec = recorder.current
-    let audio: Blob | null = null
-    if (rec && rec.state !== 'inactive') {
-      await new Promise((r) => { rec.onstop = r; rec.stop() })
-      audio = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' })
-    }
-    // The recording goes to the server's speech-to-text (ElevenLabs), which is far more accurate than
-    // the browser's recogniser. The live words on screen are only a preview, and are sent as typed
-    // text only when nothing was recorded (no MediaRecorder).
-    const payload = audio?.size ? audio : text.trim() || null
-    if (!payload) {
-      finished.current = false
-      setError('I didn’t catch that. Try again.')
+  async function finish() {
+    if (sending.current) return
+    sending.current = true
+    const question = (await live.finish()).trim()
+    if (!question) {
+      sending.current = false
+      setNote('I didn’t catch that. Try again.')
+      live.start()
       return
     }
-    ask(text.trim() || 'Your question', payload)
+    // The words are already transcribed, so the question goes up as text.
+    ask(question, question)
     go('d3')
   }
-
+  const finishRef = useRef(finish)
   useEffect(() => {
-    finishRef.current = () => finish()
+    finishRef.current = finish
   })
 
-  // The browser's own recogniser shows the words live where it works. Its first finished phrase
-  // also ends the question, as a quicker version of the pause detector.
-  const { heard, error: listenError } = useListen(true, (text) => finish(text))
+  // Live words stop changing once the person stops talking: send after a short pause.
   useEffect(() => {
-    latest.current = heard.final || heard.interim
-  }, [heard])
+    if (!live.live || !live.recording || !live.text.trim()) return
+    const t = setTimeout(() => void finishRef.current(), PAUSE_SENDS_MS)
+    return () => clearTimeout(t)
+  }, [live.live, live.recording, live.text])
 
-  const said = heard.final || ''
-  const hearing = heard.interim
+  const caption = live.error ?? note ?? (
+    live.starting ? 'Starting the microphone…'
+      : live.live === false ? 'Live words aren’t available here. Tap the button when you’re done.'
+      : 'Words appear as you speak')
   return (
     <Screen>
       <NavHeader title="Listening" onBack={back} centered icon="close" />
       <Gap h={14} />
       <div className="flex min-h-[260px] flex-1 flex-col items-center justify-center gap-[18px] rounded-[28px] bg-gs-tint">
         <Mascot mood="Listening" size={180} />
-        <VoiceBars heights={[10, 22, 36, 28, 44, 30, 18, 40, 26, 14, 8]} />
+        <VoiceBars heights={[10, 22, 36, 28, 44, 30, 18, 40, 26, 14, 8]} active={live.recording && !live.starting} />
       </div>
       <Gap h={14} />
       <div className="flex shrink-0 flex-col gap-2 rounded-[24px] border border-gs-line bg-gs-tint px-5 py-[18px]" aria-live="polite">
         <p className="t-overline text-gs-muted">You’re saying</p>
-        <p className="t-title-l">
-          {said}{said && hearing ? ' ' : ''}<span className="text-gs-muted">{hearing || (!said ? '…' : '')}</span>
-        </p>
-        <p className="t-caption text-gs-muted">
-          {error ?? (listenError || !canListen ? 'Live words aren’t available here. I’ll send your question when you pause.'
-            : 'Grey words are still being heard')}
-        </p>
+        <p className={cx('t-title-l break-words', !live.text && 'text-gs-muted')}>{live.text || '…'}</p>
+        <p className="t-caption text-gs-muted" role={live.error ? 'alert' : undefined}>{caption}</p>
       </div>
       <Gap h={20} />
-      <button type="button" onClick={() => finish()} aria-label="Done speaking"
-        className="mx-auto flex size-[88px] shrink-0 items-center justify-center rounded-full bg-gs-action active:bg-gs-action-pressed">
-        <span className="size-[26px] rounded-[7px] bg-white" />
-      </button>
+      {live.error ? (
+        <Button onClick={() => { setNote(null); live.start() }}>Try again</Button>
+      ) : (
+        <button type="button" onClick={() => void finish()} aria-label="Done speaking"
+          className="mx-auto flex size-[88px] shrink-0 items-center justify-center rounded-full bg-gs-action active:bg-gs-action-pressed">
+          <span className="size-[26px] rounded-[7px] bg-white" />
+        </button>
+      )}
       <Gap h={10} />
-      <p className="t-body-m text-center text-gs-muted">Tap when you’re done — or just pause</p>
+      <p className="t-body-m text-center text-gs-muted">{live.live === false ? 'Tap when you’re done' : 'Tap when you’re done — or just pause'}</p>
     </Screen>
   )
 }

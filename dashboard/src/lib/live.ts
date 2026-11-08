@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, socketUrl, type HarnessEvent } from './api'
-import { getToken } from './auth'
+import { getToken } from './device'
 
 const PING_MS = 25_000 // keeps tunnels and proxies from closing an idle socket
 const MAX_RETRY_MS = 10_000

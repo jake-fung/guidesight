@@ -14,7 +14,7 @@ from .config import Config
 
 DEFAULT_PROFILE = {
     "name": None,  # what Sighty calls the user (Register step 1)
-    "email": None,  # shown in Settings; sent by the app from the Auth0 profile
+    "email": None,  # shown in Settings; sent by the app from setup
 }
 
 # First-run Setup screens. Each step is "pending" until the user answers it.

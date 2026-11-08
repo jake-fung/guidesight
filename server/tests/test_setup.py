@@ -3,8 +3,8 @@ import pytest
 
 from app import create_app
 
-AUTH = {"Authorization": "Bearer test-token"}  # mock mode: every token is the same dev user
-OTHER_USER = "auth0|someone-else"
+AUTH = {"Authorization": "Bearer test-token"}  # the device id "test-token" is the user
+OTHER_USER = "someone-else"
 
 
 class FakeHarness:
