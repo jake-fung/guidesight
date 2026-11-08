@@ -123,6 +123,10 @@ The harness beeps faster as things get closer even when it's offline. Online, it
 something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
 commands need the server link.
 
+### How to wear it
+
+![How to wear it](docs/how-to-wear.svg)
+
 ## Going live
 
 1. **Firestore** (storage): create a Firebase project with Firestore, download a service-account JSON
