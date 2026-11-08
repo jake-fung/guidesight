@@ -5,6 +5,7 @@ import { useApp } from '../state'
 import { Button, Gap, Hero, IconBadge, Mascot, Radar, Screen, StatusPill, StepCard, StepHeader, TextField } from '../ui'
 import { buzz, firstWord, spellOut, spokenToEmail, useAutoRead, usePhrases, voice } from '../voice'
 import { HarnessPairing } from '../Pairing'
+import { useSensorAutoPair } from '../sensor'
 
 function useStepHeader(step: number, of = 3) {
   const { back, setSheetOpen } = useApp()
@@ -148,6 +149,7 @@ export function C3Sensor() {
   const header = useStepHeader(3)
   const online = !!link.harnessOnline
   const [pairing, setPairing] = useState(false)
+  useSensorAutoPair(!online)
   useAutoRead('Connect your sensor. Switch on the GuideSight sensor and keep it near your phone.')
 
   useEffect(() => {

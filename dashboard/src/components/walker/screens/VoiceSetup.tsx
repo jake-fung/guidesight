@@ -7,6 +7,7 @@ import { useApp, type Track } from '../state'
 import { Gap, Mascot, Screen, VoiceBars, cx } from '../ui'
 import { useLiveTranscript } from '../transcribe'
 import { buzz, firstWord, spellEmail, spellOut, spokenToEmail, useVoiceCommands, voice } from '../voice'
+import { useSensorAutoPair } from '../sensor'
 
 type Turn = 'mic' | 'how' | 'name' | 'email' | 'camera' | 'sensor' | 'done'
 const STEP: Record<Turn, number> = { mic: 1, how: 2, name: 3, email: 4, camera: 5, sensor: 6, done: 6 }
@@ -188,6 +189,7 @@ export function VoiceChat() {
   }, [log, profile.name])
 
   useVoiceCommands({ skip: () => finish(false), repeat: () => voice.replay() }, turn === 'sensor')
+  useSensorAutoPair(turn === 'sensor')
   useEffect(() => {
     if (turn === 'sensor' && link.harnessOnline) {
       buzz(80)
