@@ -105,9 +105,11 @@ export const api = {
   sendFrame: (walkId: string, imageBase64: string, trigger: FrameTrigger, location?: LatLng) =>
     post<{ alert: Alert }>(`/walks/${walkId}/frame`, { image: imageBase64, trigger, location }),
 
-  askQuestion: (walkId: string, audio: Blob, image: Blob | null, location?: LatLng) => {
+  /** Spoken (audio) or typed (string) question about the current frame. */
+  askQuestion: (walkId: string, audio: Blob | string, image: Blob | null, location?: LatLng) => {
     const form = new FormData()
-    form.append('audio', audio, `question.${audio.type.includes('mp4') ? 'm4a' : 'webm'}`)
+    if (typeof audio === 'string') form.append('question', audio)
+    else form.append('audio', audio, `question.${audio.type.includes('mp4') ? 'm4a' : 'webm'}`)
     if (image) form.append('image', image, 'frame.jpg')
     if (location) {
       form.append('lat', String(location.lat))

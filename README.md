@@ -16,8 +16,8 @@ Built for HackCamp 2026.
 
 | Folder              | What                                                              | Stack |
 |---------------------|-------------------------------------------------------------------|-------|
-| `server/`           | API: profile & first-run setup, walks, frames, voice questions, live harness link | Flask, flask-sock, PyJWT (Auth0), firebase-admin (Firestore), google-genai, ElevenLabs |
-| `dashboard/`        | Web app. `/walk`: Login → Setup (pair harness, preferences) → Live Walk. `/`: walk dashboard | React, Vite, Tailwind v4, Leaflet, Auth0 SPA SDK |
+| `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, TTS, live harness link | Flask, flask-sock, PyJWT (Auth0), firebase-admin (Firestore), google-genai, ElevenLabs |
+| `dashboard/`        | Walker web app: Auth0 login → first-run setup → walker app (Home, Guide mode, Ask, Read text, Settings) | React, Vite, Tailwind v4, Auth0 SPA SDK |
 | `firmware/uno_r4/`  | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | Arduino UNO R4 WiFi, ArduinoHttpClient |
 
 ## Quick start (mock mode, no API keys)
@@ -34,7 +34,7 @@ cp .env.example .env
 
 # 2. Web app (walker app + dashboard). Vite forwards /api to the server.
 cd dashboard && cp .env.example .env && npm install && npm run dev
-#   http://localhost:5173/walk  walker app
+#   http://localhost:5173/walk  walker app (add ?demo for the prototype's sample content, #d4 etc. to open a screen)
 ```
 
 ### On a phone
@@ -49,7 +49,7 @@ cloudflared tunnel --url http://localhost:5173   # prints https://<random>.trycl
 
 Open `https://<random>.trycloudflare.com/walk` on the phone. For a home-screen icon: Safari → Share →
 Add to Home Screen. Keep the page open with the screen on during a walk (it holds a wake lock).
-On iPhones, tap **Start walk** yourself: Safari only lets a page speak after a tap.
+On iPhones, tap the first screen (**Tap anywhere to start**) yourself: Safari only lets a page speak after a tap.
 
 ## Harness (UNO R4 WiFi)
 
@@ -69,7 +69,8 @@ On iPhones, tap **Start walk** yourself: Safari only lets a page speak after a t
    - **HARNESS_ID**: something unique, like `gs-7f3k9q`.
 3. Pick "Arduino UNO R4 WiFi" and upload. Serial Monitor at 115200 shows Wi-Fi, server and events.
    The built-in LED is on while the harness is connected to the server.
-4. In the walker app's Setup screen, type the same harness ID and tap **Save**, then **Test buzz**.
+4. In the walker app, open **Settings → Sensor** (or **Enter sensor ID** on the Connect your sensor step), type the
+   same harness ID and tap **Save**, then **Test buzz**.
 
 The harness beeps faster as things get closer even when it's offline. Obstacle events and buzz
 commands need the server link.

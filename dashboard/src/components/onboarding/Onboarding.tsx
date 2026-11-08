@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api, type Me, type SensorSearch } from '../../lib/api'
 import { getEmail } from '../../lib/auth'
-import BigButton from '../walker/BigButton'
+import BigButton from './BigButton'
 
 const SEARCH_EVERY_MS = 2000
 

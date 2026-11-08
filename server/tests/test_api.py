@@ -89,3 +89,12 @@ def test_obstacle_event_from_ultrasonic_harness(client):
     events = client.get(f"/api/walks/{wid}", headers=AUTH).get_json()["events"]
     obstacles = [e for e in events if e["type"] == "obstacle"]
     assert len(obstacles) == 2 and obstacles[1]["motion"] == {"cm": 60}
+
+
+def test_voice_accepts_typed_question(client):
+    wid = client.post("/api/walks", headers=AUTH).get_json()["id"]
+    r = client.post(f"/api/walks/{wid}/voice", headers=AUTH,
+                    data={"question": "Is there a bench nearby?"}, content_type="multipart/form-data")
+    assert r.status_code == 200 and r.get_json()["transcript"] == "Is there a bench nearby?"
+    r = client.post(f"/api/walks/{wid}/voice", headers=AUTH, data={}, content_type="multipart/form-data")
+    assert r.status_code == 400

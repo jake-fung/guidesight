@@ -1,1 +1,115 @@
 @import "tailwindcss";
+@import "@fontsource-variable/dm-sans/opsz.css";
+
+/* ---- Walker app design tokens (Figma: GuideSight — Mobile Web Prototype, v6 · Headspace style) ---- */
+@theme {
+  --font-gs: "DM Sans Variable", "DM Sans", system-ui, sans-serif;
+
+  --color-gs-ink: #2d2b2a;           /* text/primary */
+  --color-gs-muted: #6b6560;         /* text/secondary */
+  --color-gs-faint: #8c857f;         /* inactive tab */
+  --color-gs-brand: #0055d4;         /* text/brand */
+  --color-gs-action: #0061ef;        /* action/primary, focus/ring */
+  --color-gs-action-pressed: #004bbb;
+  --color-gs-selected: #eaf1fe;      /* bg/selected */
+  --color-gs-surface: #ffffff;
+  --color-gs-tint: #f6f2ec;          /* bg/tint */
+  --color-gs-line: #ece4d8;          /* border/subtle, bg/tint-strong */
+
+  --color-gs-clear-bg: #e4f4e8;
+  --color-gs-clear: #3da35d;
+  --color-gs-caution-bg: #fff4d1;
+  --color-gs-caution: #f9c440;
+  --color-gs-stop-bg: #ffe6de;
+  --color-gs-stop: #f25c3b;
+
+  --color-gs-yellow: #ffc93c;        /* hero/yellow-bg */
+  --color-gs-yellow-2: #ffd766;
+  --color-gs-yellow-3: #ffe6a0;
+  --color-gs-orange: #ff9a4d;        /* hero/orange-bg */
+  --color-gs-orange-2: #ffb073;
+  --color-gs-orange-3: #ffc79b;
+  --color-gs-green: #66bd87;         /* hero/green-bg */
+  --color-gs-green-2: #82cb9d;
+  --color-gs-green-3: #a4dab7;
+  --color-gs-pink: #f6b3cf;
+
+  --color-tile-blue: #9bd1f7;
+  --color-tile-blue-fg: #16324a;
+  --color-tile-yellow: #f9c440;
+  --color-tile-green: #6cc08b;
+  --color-tile-green-fg: #183824;
+  --color-tile-pink: #f6b3cf;
+  --color-tile-pink-fg: #3d1a2a;
+}
+
+/*
+ * Type ramp (HS/* text styles). Sizes multiply by --gs-text, which the "Larger text" and
+ * "Text size" settings change, so the whole app scales together.
+ */
+@utility t-display-xl { font-weight: 700; font-size: calc(36px * var(--gs-text, 1)); line-height: 1.1667; letter-spacing: -0.72px; }
+@utility t-display-l { font-weight: 700; font-size: calc(30px * var(--gs-text, 1)); line-height: 1.2; letter-spacing: -0.45px; }
+@utility t-display-stop { font-weight: 700; font-size: calc(64px * var(--gs-text, 1)); line-height: 1.0625; letter-spacing: -1.92px; }
+@utility t-title-l { font-weight: 700; font-size: calc(24px * var(--gs-text, 1)); line-height: 1.25; letter-spacing: -0.24px; }
+@utility t-title-m { font-weight: 600; font-size: calc(20px * var(--gs-text, 1)); line-height: 1.3; letter-spacing: -0.1px; }
+@utility t-option { font-weight: 600; font-size: calc(19px * var(--gs-text, 1)); line-height: 1.158; letter-spacing: -0.095px; }
+@utility t-body-l { font-weight: 400; font-size: calc(18px * var(--gs-text, 1)); line-height: 1.444; }
+@utility t-body-m { font-weight: 400; font-size: calc(16px * var(--gs-text, 1)); line-height: 1.4375; }
+@utility t-label-l { font-weight: 600; font-size: calc(18px * var(--gs-text, 1)); line-height: 1.278; }
+@utility t-label-m { font-weight: 600; font-size: calc(15px * var(--gs-text, 1)); line-height: 1.333; }
+@utility t-caption { font-weight: 500; font-size: calc(13px * var(--gs-text, 1)); line-height: 1.385; }
+@utility t-overline { font-weight: 700; font-size: calc(12px * var(--gs-text, 1)); line-height: 1.333; letter-spacing: 0.6px; text-transform: uppercase; }
+
+.gs-app {
+  font-family: var(--font-gs);
+  font-variation-settings: "opsz" 14;
+  color: var(--color-gs-ink);
+  background: var(--color-gs-surface);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+.gs-app :focus-visible {
+  outline: 3px solid var(--color-gs-action);
+  outline-offset: 3px;
+}
+
+/* "Increase contrast": darker secondary text and borders. */
+.gs-app.gs-contrast {
+  --color-gs-muted: #3f3a36;
+  --color-gs-faint: #4f4944;
+  --color-gs-line: #8c857f;
+}
+
+/* Sighty's two-frame animations (Phase=1 ↔ Phase=2 in the Figma components). */
+@keyframes gs-phase-a { 0%, 49.9% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@keyframes gs-phase-b { 0%, 49.9% { opacity: 0 } 50%, 100% { opacity: 1 } }
+.gs-phase-a { animation: gs-phase-a var(--gs-phase, 1.2s) steps(1) infinite; }
+.gs-phase-b { animation: gs-phase-b var(--gs-phase, 1.2s) steps(1) infinite; }
+
+@keyframes gs-bar { 0%, 100% { transform: scaleY(0.45) } 50% { transform: scaleY(1) } }
+.gs-bar { animation: gs-bar 0.9s ease-in-out infinite; transform-origin: center; }
+
+@keyframes gs-sheet-in { from { transform: translateY(100%) } to { transform: translateY(0) } }
+.gs-sheet-in { animation: gs-sheet-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-phase-a, .gs-phase-b, .gs-bar, .gs-sheet-in { animation: none; }
+  .gs-phase-b { opacity: 0; }
+}
+
+/* Settings sliders: 8px track, filled to --pct in brand blue, 28px white thumb. */
+.gs-range::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 4px;
+  background: linear-gradient(to right, var(--color-gs-action) var(--pct), var(--color-gs-line) var(--pct));
+}
+.gs-range::-moz-range-track { height: 8px; border-radius: 4px; background: var(--color-gs-line); }
+.gs-range::-moz-range-progress { height: 8px; border-radius: 4px; background: var(--color-gs-action); }
+.gs-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -10px;
+  width: 28px; height: 28px; border-radius: 50%; background: #fff;
+  border: 2px solid var(--color-gs-action); box-shadow: 0 2px 4px rgba(13, 26, 64, 0.18);
+}
+.gs-range::-moz-range-thumb {
+  width: 24px; height: 24px; border-radius: 50%; background: #fff;
+  border: 2px solid var(--color-gs-action); box-shadow: 0 2px 4px rgba(13, 26, 64, 0.18);
+}
