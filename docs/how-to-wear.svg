@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1150" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1500" height="1150" fill="#000000"/>
+
+  <text x="60" y="60" fill="#ffffff" font-size="34" font-weight="bold">GuideSight — How to Wear It</text>
+
+  <!-- body -->
+  <polygon points="440,290 690,290 740,700 390,700" fill="#262626" stroke="#6b7280" stroke-width="2"/>
+  <polygon points="390,340 310,560 420,580" fill="#262626" stroke="#6b7280" stroke-width="2"/>
+  <polygon points="740,340 820,560 710,580" fill="#262626" stroke="#6b7280" stroke-width="2"/>
+  <rect x="420" y="700" width="90" height="330" fill="#262626" stroke="#6b7280" stroke-width="2"/>
+  <rect x="600" y="700" width="90" height="330" fill="#262626" stroke="#6b7280" stroke-width="2"/>
+
+  <!-- head -->
+  <circle cx="565" cy="205" r="85" fill="#262626" stroke="#6b7280" stroke-width="2"/>
+  <rect x="450" y="193" width="200" height="34" rx="17" fill="#111111" stroke="#9ca3af" stroke-width="1.5"/>
+  <text x="550" y="217" fill="#ffffff" font-size="15" text-anchor="middle">blindfold (demo)</text>
+
+  <!-- earbud -->
+  <circle cx="642" cy="222" r="10" fill="#c026d3"/>
+  <path d="M 642 222 L 980 222" fill="none" stroke="#c026d3" stroke-width="3"/>
+
+  <!-- lanyard -->
+  <path d="M 520 288 L 510 345" fill="none" stroke="#38bdf8" stroke-width="4"/>
+  <path d="M 610 288 L 620 345" fill="none" stroke="#38bdf8" stroke-width="4"/>
+
+  <!-- camera cone -->
+  <polygon points="583,385 900,330 900,440" fill="#38bdf8" opacity="0.15"/>
+  <!-- ultrasonic cone -->
+  <polygon points="565,462 900,410 900,520" fill="#22c55e" opacity="0.15"/>
+
+  <!-- phone -->
+  <rect x="500" y="345" width="130" height="80" rx="14" fill="#000000" stroke="#ffffff" stroke-width="3"/>
+  <circle cx="565" cy="385" r="18" fill="#38bdf8"/>
+
+  <!-- HC-SR04 -->
+  <rect x="500" y="435" width="130" height="55" rx="10" fill="#1d4ed8" stroke="#ffffff" stroke-width="2"/>
+  <circle cx="530" cy="462" r="14" fill="#9ca3af"/>
+  <circle cx="600" cy="462" r="14" fill="#9ca3af"/>
+
+  <!-- yellow jumper wire -->
+  <path d="M 565 490 C 565 540 600 520 600 560" fill="none" stroke="#eab308" stroke-width="4"/>
+
+  <!-- hip pouch -->
+  <rect x="505" y="560" width="170" height="110" rx="16" fill="#3f2a1f" stroke="#ffffff" stroke-width="2.5"/>
+  <text x="590" y="600" fill="#ffffff" font-size="18" font-weight="bold" text-anchor="middle">ESP32</text>
+  <text x="590" y="624" fill="#ffffff" font-size="16" text-anchor="middle">+ buzzer</text>
+  <text x="590" y="648" fill="#ffffff" font-size="16" text-anchor="middle">+ power bank</text>
+
+  <!-- right-side legend -->
+  <!-- earbud -->
+  <circle cx="995" cy="212" r="14" fill="none" stroke="#c026d3" stroke-width="2"/>
+  <text x="995" y="217" fill="#c026d3" font-size="15" text-anchor="middle">4</text>
+  <text x="1017" y="218" fill="#c026d3" font-size="20" font-weight="bold">Earbud</text>
+  <text x="995" y="246" fill="#d1d5db" font-size="17">Spoken alerts from the phone</text>
+
+  <!-- phone -->
+  <line x1="930" y1="378" x2="975" y2="378" stroke="#38bdf8" stroke-width="4"/>
+  <circle cx="995" cy="378" r="14" fill="none" stroke="#38bdf8" stroke-width="2"/>
+  <text x="995" y="383" fill="#38bdf8" font-size="15" text-anchor="middle">1</text>
+  <text x="1017" y="384" fill="#38bdf8" font-size="20" font-weight="bold">Phone on lanyard</text>
+  <text x="995" y="412" fill="#d1d5db" font-size="17">Camera faces forward → Gemini</text>
+
+  <!-- HC-SR04 -->
+  <line x1="930" y1="468" x2="975" y2="468" stroke="#22c55e" stroke-width="4"/>
+  <circle cx="995" cy="468" r="14" fill="none" stroke="#22c55e" stroke-width="2"/>
+  <text x="995" y="473" fill="#22c55e" font-size="15" text-anchor="middle">2</text>
+  <text x="1017" y="474" fill="#22c55e" font-size="20" font-weight="bold">HC-SR04 under phone</text>
+  <text x="995" y="502" fill="#d1d5db" font-size="17">Taped/zip-tied to the lanyard,</text>
+  <text x="995" y="526" fill="#d1d5db" font-size="17">tilted slightly down</text>
+
+  <!-- hip pouch legend -->
+  <line x1="930" y1="618" x2="975" y2="618" stroke="#eab308" stroke-width="4"/>
+  <circle cx="995" cy="618" r="14" fill="none" stroke="#eab308" stroke-width="2"/>
+  <text x="995" y="623" fill="#eab308" font-size="15" text-anchor="middle">3</text>
+  <text x="1017" y="624" fill="#eab308" font-size="20" font-weight="bold">Hip pouch / fanny pack</text>
+  <text x="995" y="652" fill="#d1d5db" font-size="17">ESP32 + buzzer + power bank,</text>
+  <text x="995" y="676" fill="#d1d5db" font-size="17">long jumper wires up to sensor</text>
+
+  <text x="60" y="1100" fill="#9ca3af" font-size="17">Green cone = ultrasonic (instant beep, ~2 m) · Blue cone = camera (Gemini says what it is)</text>
+</svg>
