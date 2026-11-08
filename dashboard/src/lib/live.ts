@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, socketUrl, type HarnessEvent } from './api'
-import { getIdToken } from './auth'
+import { getToken } from './device'
 
 const PING_MS = 25_000 // keeps tunnels and proxies from closing an idle socket
 const MAX_RETRY_MS = 10_000
@@ -33,7 +33,7 @@ export function useLiveLink(): LiveLink {
     let retryTimer: ReturnType<typeof setTimeout> | undefined
 
     async function connect() {
-      const token = await getIdToken().catch(() => '')
+      const token = await getToken().catch(() => '')
       if (stopped) return
       ws = new WebSocket(socketUrl('/live'))
       ws.onopen = () => {

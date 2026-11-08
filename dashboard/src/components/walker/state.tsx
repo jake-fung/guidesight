@@ -5,14 +5,14 @@ import { useLiveLink, type LiveLink } from '../../lib/live'
 import { useWalkSession, type WalkSession } from './session'
 import { voice } from './voice'
 
-/** Screen ids match the Figma frame names (A0 … D8, S = accessibility sheet). */
+/** Screen ids match the Figma frame names (A0 … D8, S = accessibility sheet). v1 = the voice setup chat (C0–C6). */
 export type ScreenId =
   | 'a0' | 'a1' | 'a2' | 'a3'
-  | 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7'
+  | 'v1'
   | 'b1' | 'b2' | 'b3' | 'c1' | 'c2' | 'c3' | 'c4'
   | 'd1' | 'd2' | 'd3' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
 
-export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'b1', 'b2', 'b3', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8']
+export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'b3', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8']
 
 export type Track = 'blind' | 'low-vision' | 'sighted'
 

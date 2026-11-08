@@ -2,7 +2,7 @@
 
 Both keep a WebSocket open to the server. The first message on each socket authenticates it:
     harness -> server:  {"type": "hello", "id": "<harness id>", "key": "<HARNESS_KEY>"}
-    phone   -> server:  {"type": "auth", "token": "<Firebase ID token>"}
+    phone   -> server:  {"type": "auth", "token": "<device id>"}
 
 After that:
     harness -> server:  {"type": "obstacle", "cm": 85}  (or "stop"/"pull" with "accel"), or "ping"
@@ -12,7 +12,7 @@ After that:
                         {"type": "harness_status", "harness_id": "...", "online": true|false}
     phone   -> server:  "ping" (keeps tunnels and proxies from closing an idle socket)
 
-A harness belongs to whichever user saved its id as settings.harness_id on the Setup screen.
+A harness belongs to whichever user saved its id as settings.harness_id (paired on the Setup screen).
 Connections live in this process's memory, so run a single server process.
 """
 import hmac
@@ -20,7 +20,7 @@ import json
 import logging
 import threading
 
-from flask import Flask, current_app
+from flask import Flask, current_app, request
 from flask_sock import Sock
 from simple_websocket import ConnectionClosed
 
@@ -39,8 +39,9 @@ log = logging.getLogger(__name__)
 class Connection:
     """A WebSocket that several request threads may send on."""
 
-    def __init__(self, ws):
+    def __init__(self, ws, ip: str | None = None):
         self.ws = ws
+        self.ip = ip  # where it connected from, to find sensors on the same network as the phone
         self._lock = threading.Lock()
 
     def send(self, data: str) -> bool:
@@ -83,6 +84,11 @@ class Hub:
     def is_online(self, harness_id: str | None) -> bool:
         return bool(harness_id) and harness_id in self._harnesses
 
+    def online_harnesses(self) -> dict[str, str | None]:
+        """harness id -> the IP address it connected from."""
+        with self._lock:
+            return {hid: getattr(conn, "ip", None) for hid, conn in self._harnesses.items()}
+
     def buzz(self, harness_id: str | None, pattern: str) -> bool:
         conn = self._harnesses.get(harness_id) if harness_id else None
         return conn is not None and conn.send(pattern)
@@ -108,6 +114,18 @@ def get_hub() -> Hub:
     return current_app.extensions["hub"]
 
 
+def client_ip() -> str | None:
+    """The caller's public IP. Behind Cloudflare Tunnel or a proxy the socket address is the proxy's,
+    so the forwarded header wins. Headers can be faked: only use this as a hint, never for access."""
+    forwarded = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For", "")
+    return forwarded.split(",")[0].strip() or request.remote_addr
+
+
+def notify_harness_status(uid: str, harness_id: str | None):
+    """Tells the user's open app tabs whether their harness is connected."""
+    get_hub().send_to_user(uid, _status(harness_id, get_hub().is_online(harness_id)))
+
+
 def buzz_user_harness(uid: str, pattern: str | None, settings: dict | None = None) -> bool:
     """Vibrates the harness paired with this user. False if it isn't connected."""
     if pattern not in PATTERNS:
@@ -123,8 +141,7 @@ def _status(harness_id: str | None, online: bool) -> dict:
 def _harness_key_ok(key: str) -> bool:
     if Config.HARNESS_KEY:
         return hmac.compare_digest(key.encode(), Config.HARNESS_KEY.encode())
-    # No key configured: fine in mock mode, refused once real logins are on.
-    return not Config.firebase_enabled()
+    return True  # no key configured: any harness may connect
 
 
 def _first_message(ws) -> dict:
@@ -167,7 +184,7 @@ def init_live(app: Flask):
             ws.close(reason=1008, message="unauthorized")
             return
 
-        hub, conn = get_hub(), Connection(ws)
+        hub, conn = get_hub(), Connection(ws, client_ip())
         replaced = hub.add_harness(harness_id, conn)
         if replaced:
             replaced.close()

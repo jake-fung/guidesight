@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { icons } from '../icons'
 import { useApp } from '../state'
 import { Button, Gap, Hero, IconBadge, Mascot, Radar, Screen, StatusPill, StepCard, StepHeader, TextField } from '../ui'
-import { buzz, firstWord, spellOut, spokenToEmail, useAutoRead, useListen } from '../voice'
+import { buzz, firstWord, spellOut, spokenToEmail, useAutoRead, usePhrases, voice } from '../voice'
 import { CodeEntry } from './Start'
 import { HarnessPairing } from '../Pairing'
 
@@ -20,13 +20,13 @@ export function B1Name() {
   const [heard, setHeard] = useState<string | null>(null)
   useAutoRead('What should Sighty call you? Type your name, or tap the mic and say it.')
 
-  useListen(dictating, (text) => {
+  const mic = usePhrases(dictating, (text) => {
     const n = firstWord(text.replace(/\b(my name is|i'm|i am|call me)\b/gi, ''))
     if (!n) return
     setName(n)
     setHeard(n)
     setDictating(false)
-  })
+  }, { silenceMs: 1000 })
 
   function next() {
     if (!name.trim()) return
@@ -43,7 +43,7 @@ export function B1Name() {
       <h1 className="t-display-l max-w-[260px]">What should Sighty call you?</h1>
       <Gap h={38} />
       <TextField label="Your name" autoComplete="given-name" placeholder="First name" value={name}
-        onChange={(e) => { setName(e.target.value); setHeard(null) }} onMic={() => setDictating((d) => !d)} micActive={dictating}
+        onChange={(e) => { setName(e.target.value); setHeard(null) }} onMic={() => { voice.stop(); setDictating((d) => !d) }} micActive={dictating}
         onKeyDown={(e) => e.key === 'Enter' && next()} />
       {(heard || dictating) && (
         <>
@@ -51,7 +51,7 @@ export function B1Name() {
           <div className="flex items-center gap-3 rounded-2xl bg-gs-tint py-3.5 pl-4 pr-4" role="status">
             <img src={icons.mic20} alt="" className="size-[22px]" />
             <div className="min-w-0 flex-1">
-              <p className="t-caption text-gs-muted">{dictating ? 'Sighty is listening…' : 'Sighty heard'}</p>
+              <p className="t-caption text-gs-muted">{!dictating ? 'Sighty heard' : mic.error ?? (mic.listening ? 'Sighty is listening… say your first name.' : 'Starting the microphone…')}</p>
               {heard && <p className="t-label-l">“{heard}” — {spellOut(heard)}</p>}
             </div>
             {heard && <button type="button" className="t-label-m text-gs-brand" onClick={() => document.getElementById('f-yourname')?.focus()}>Edit</button>}
@@ -71,7 +71,7 @@ export function B2Email() {
   const [dictating, setDictating] = useState(false)
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   useAutoRead(`What’s your email${profile.name ? `, ${profile.name}` : ''}? You’ll get a code each time you sign in.`)
-  useListen(dictating, (text) => { setEmail(spokenToEmail(text)); setDictating(false) })
+  usePhrases(dictating, (text) => { setEmail(spokenToEmail(text)); setDictating(false) }, { silenceMs: 1500, maxMs: 15_000 })
 
   function next() {
     if (!valid) return
@@ -90,7 +90,7 @@ export function B2Email() {
       <p className="t-body-l text-gs-muted">You’ll get a code each time you sign in.</p>
       <Gap h={28} />
       <TextField label="Email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" placeholder="name@email.com"
-        value={email} onChange={(e) => setEmail(e.target.value)} onMic={() => setDictating((d) => !d)} micActive={dictating}
+        value={email} onChange={(e) => setEmail(e.target.value)} onMic={() => { voice.stop(); setDictating((d) => !d) }} micActive={dictating}
         onKeyDown={(e) => e.key === 'Enter' && next()} />
       <Gap h={20} />
       <Button onClick={next} disabled={!valid}>Continue</Button>

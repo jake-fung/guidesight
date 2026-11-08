@@ -4,5 +4,5 @@ flask-sock>=0.7
 python-dotenv>=1.0
 firebase-admin>=6.5
 google-genai>=1.0
-assemblyai>=0.30
+elevenlabs>=2.0
 pytest>=8.0

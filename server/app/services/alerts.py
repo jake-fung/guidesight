@@ -1,7 +1,7 @@
 """Turns a vision result into what the user hears (TTS text) and feels (haptic pattern).
 
-Speech is synthesized on the phone (browser speechSynthesis) so alerts play with no extra network
-round-trip. To move TTS server-side, add a synthesize() here and return audio in the payload.
+The app turns the text into an ElevenLabs voice clip via /api/tts (services/tts.py), and uses the
+phone's built-in voice when ElevenLabs isn't set up.
 """
 
 # Pattern names the harness firmware understands (see firmware/uno_r4/uno_r4.ino).

@@ -9,6 +9,7 @@
  *  5. Then it listens for a few seconds for spoken commands.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { api, ApiError } from '../../lib/api'
 
 export type SpeechState = {
   text: string
@@ -26,12 +27,139 @@ const set = (patch: Partial<SpeechState>) => {
 
 let baseRate = 1
 let slower = false
+/** A phone voice picked in Settings. null = Sighty's ElevenLabs voice (server /api/tts). */
 let voiceName: string | null = null
 let unlocked = false
 let enabled = true
-let current: SpeechSynthesisUtterance | null = null
+
+/** Bumped on every say() and stop(), so a clip or utterance from an older job is ignored. */
+let job = 0
+/** What the current job is doing, for pause/resume. */
+let mode: 'loading' | 'clip' | 'phone' | null = null
+/** Ends the current job: stops its sound and resolves its say() promise. */
+let endJob: (() => void) | null = null
+let aborter: AbortController | null = null
+/** Settles the clip or utterance that's playing (speechSynthesis.cancel() doesn't always fire onend). */
+let dropSound: (() => void) | null = null
+
+// ElevenLabs voices only go from 0.7x to 1.2x. Other rates are reached by playing the clip
+// faster or slower (the browser keeps the pitch).
+const VOICE_SPEED = { min: 0.7, max: 1.2 }
+// A tiny silent WAV, played inside the first tap to unlock audio playback on iPhones.
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='
+let player: HTMLAudioElement | null = null
+/** Set after a 503 (no ElevenLabs key on the server), so we stop asking for the rest of the session. */
+let elevenLabsOff = false
+/** Recent clips, so Replay and repeated screen reads don't fetch again. */
+const clips = new Map<string, Blob>()
+const MAX_CLIPS = 30
 
 const synth = () => (typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null)
+const audio = () => (player ??= new Audio())
+
+/** One AudioContext for mic volume checks. iPhones only let it run once it's resumed inside a tap. */
+let sharedCtx: AudioContext | null = null
+export function audioContext(): AudioContext | null {
+  if (sharedCtx) return sharedCtx
+  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  return Ctx ? (sharedCtx = new Ctx()) : null
+}
+
+/** Highlights captions up to the end of the word at char `at`. */
+function spokenUpTo(text: string, at: number) {
+  const end = text.indexOf(' ', at)
+  const spokenTo = end === -1 ? text.length : end
+  if (spokenTo !== state.spokenTo) set({ spokenTo })
+}
+
+function halt() {
+  job++
+  mode = null
+  aborter?.abort()
+  aborter = null
+  player?.pause()
+  synth()?.cancel()
+  dropSound?.()
+  dropSound = null
+  const end = endJob
+  endJob = null
+  end?.()
+}
+
+async function fetchClip(text: string, speed: number, signal: AbortSignal): Promise<Blob | null> {
+  const key = `${speed}|${text}`
+  const cached = clips.get(key)
+  if (cached) return cached
+  try {
+    const blob = await api.speech(text, speed, signal)
+    clips.set(key, blob)
+    if (clips.size > MAX_CLIPS) clips.delete(clips.keys().next().value!)
+    return blob
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 503) elevenLabsOff = true
+    else if (!signal.aborted) console.warn('ElevenLabs voice failed, using the phone voice', e)
+    return null
+  }
+}
+
+/** Plays an ElevenLabs clip. Resolves true when it finished, false if it couldn't play. */
+function playClip(id: number, text: string, blob: Blob, playbackRate: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const el = audio()
+    const url = URL.createObjectURL(blob)
+    let frame = 0
+    let settled = false
+    const done = (played: boolean) => {
+      if (settled) return
+      settled = true
+      if (dropSound === stop) dropSound = null
+      cancelAnimationFrame(frame)
+      el.onplaying = el.onended = el.onerror = null
+      URL.revokeObjectURL(url)
+      resolve(played)
+    }
+    // No word timings from the clip, so captions follow the share of the clip played so far.
+    const track = () => {
+      if (Number.isFinite(el.duration) && el.duration > 0) {
+        spokenUpTo(text, Math.floor((el.currentTime / el.duration) * text.length))
+      }
+      if (!el.paused && !el.ended) frame = requestAnimationFrame(track)
+    }
+    el.onplaying = () => {
+      if (id !== job) return
+      set({ status: 'speaking' })
+      track()
+    }
+    el.onended = () => done(true)
+    el.onerror = () => done(false)
+    const stop = () => done(true)
+    dropSound = stop
+    el.src = url
+    el.defaultPlaybackRate = el.playbackRate = playbackRate
+    mode = 'clip'
+    // AbortError = paused before it started; resume() plays it again.
+    if (state.status !== 'paused') el.play().catch((e) => e?.name !== 'AbortError' && done(false))
+  })
+}
+
+function speakWithPhone(id: number, text: string, rate: number, phoneVoice: SpeechSynthesisVoice | null): Promise<void> {
+  const s = synth()
+  if (!s) return Promise.resolve()
+  mode = 'phone'
+  return new Promise((resolve) => {
+    const u = new SpeechSynthesisUtterance(text)
+    u.rate = rate
+    if (phoneVoice) u.voice = phoneVoice
+    u.onstart = () => id === job && set({ status: 'speaking' })
+    u.onboundary = (e) => id === job && spokenUpTo(text, e.charIndex + 1)
+    u.onend = u.onerror = () => {
+      if (dropSound === resolve) dropSound = null
+      resolve()
+    }
+    dropSound = resolve
+    s.speak(u)
+  })
+}
 
 export const voice = {
   subscribe(l: () => void) {
@@ -43,6 +171,10 @@ export const voice = {
   /** Must run inside a tap (iOS Safari only lets a page speak after a user gesture). */
   unlock() {
     unlocked = true
+    const el = audio()
+    el.src = SILENCE
+    el.play().catch(() => {})
+    audioContext()?.resume().catch(() => {})
     const s = synth()
     if (!s) return
     const u = new SpeechSynthesisUtterance(' ')
@@ -64,46 +196,59 @@ export const voice = {
 
   /** Speaks text, interrupting anything already being said. Resolves when it finishes or is cut off. */
   say(text: string, opts: { force?: boolean } = {}): Promise<void> {
-    const s = synth()
-    if (!s || !text || (!enabled && !opts.force) || !unlocked) {
+    halt()
+    if (!text || (!enabled && !opts.force) || !unlocked) {
       // Not speaking: show the whole caption as already read.
       set({ text, spokenTo: text.length, status: 'idle' })
       return Promise.resolve()
     }
-    set({ text, spokenTo: 0, status: 'idle' })
-    s.cancel()
+    const id = job
+    const rate = baseRate * (slower ? 0.8 : 1)
+    const phoneVoice = (voiceName && synth()?.getVoices().find((x) => x.name === voiceName)) || null
+    const useClip = !phoneVoice && !elevenLabsOff
+    // 'speaking' while the clip downloads too, so the mic doesn't start listening in between.
+    set({ text, spokenTo: 0, status: useClip ? 'speaking' : 'idle' })
+
     return new Promise((resolve) => {
-      const u = new SpeechSynthesisUtterance(text)
-      u.rate = baseRate * (slower ? 0.8 : 1)
-      const v = voiceName && s.getVoices().find((x) => x.name === voiceName)
-      if (v) u.voice = v
-      u.onstart = () => set({ status: 'speaking' })
-      u.onboundary = (e) => {
-        if (current !== u) return
-        const end = text.indexOf(' ', e.charIndex + 1)
-        set({ spokenTo: end === -1 ? text.length : end })
-      }
-      const done = () => {
-        if (current === u) {
-          current = null
-          set({ status: 'idle', spokenTo: text.length })
-        }
+      endJob = resolve
+      const finish = () => {
+        if (id !== job) return // already ended by halt()
+        endJob = null
+        mode = null
+        set({ status: 'idle', spokenTo: text.length })
         resolve()
       }
-      u.onend = done
-      u.onerror = done
-      current = u
-      s.speak(u)
+      ;(async () => {
+        if (useClip) {
+          mode = 'loading'
+          aborter = new AbortController()
+          const speed = Math.min(Math.max(rate, VOICE_SPEED.min), VOICE_SPEED.max)
+          const blob = await fetchClip(text, speed, aborter.signal)
+          if (id !== job) return
+          if (blob && (await playClip(id, text, blob, rate / speed))) return finish()
+          if (id !== job) return
+        }
+        if (state.status === 'paused') set({ status: 'idle' })
+        await speakWithPhone(id, text, rate, phoneVoice)
+        finish()
+      })().catch((e) => {
+        console.warn('speech failed', e)
+        finish()
+      })
     })
   },
 
   pause() {
-    synth()?.pause()
+    if (mode === 'clip') player?.pause()
+    else synth()?.pause()
     set({ status: 'paused' })
   },
   resume() {
-    synth()?.resume()
-    set({ status: state.text && current ? 'speaking' : 'idle' })
+    if (state.status !== 'paused') return
+    set({ status: mode ? 'speaking' : 'idle' })
+    if (mode === 'clip') player?.play().catch(() => {})
+    else if (mode === 'phone') synth()?.resume()
+    // 'loading': the clip starts playing when it arrives.
   },
   replay() {
     return voice.say(state.text, { force: true })
@@ -116,10 +261,19 @@ export const voice = {
     return slower
   },
   stop() {
-    current = null
-    synth()?.cancel()
+    halt()
     set({ status: 'idle', spokenTo: state.text.length })
   },
+}
+
+// Phones only allow sound after a tap. A0 unlocks it, but a reload (or a link straight to a screen)
+// skips A0, so the first tap anywhere unlocks it too.
+if (typeof document !== 'undefined') {
+  const unlockOnTap = () => {
+    if (!unlocked) voice.unlock()
+    document.removeEventListener('pointerdown', unlockOnTap, true)
+  }
+  document.addEventListener('pointerdown', unlockOnTap, true)
 }
 
 export function useSpeech() {
@@ -157,9 +311,9 @@ type Recognition = {
   stop: () => void
   abort: () => void
 }
-type RecognitionCtor = new () => Recognition
+export type RecognitionCtor = new () => Recognition
 
-const Recognition: RecognitionCtor | undefined =
+export const Recognition: RecognitionCtor | undefined =
   typeof window === 'undefined'
     ? undefined
     : ((window as unknown as { SpeechRecognition?: RecognitionCtor }).SpeechRecognition ??
@@ -169,6 +323,15 @@ export const canListen = !!Recognition
 
 export type Heard = { final: string; interim: string }
 
+/** Recogniser errors that won't fix themselves by restarting (SpeechRecognitionErrorEvent.error). */
+const FATAL_LISTEN_ERRORS: Record<string, string> = {
+  'not-allowed': 'Microphone access is blocked for this site.',
+  'service-not-allowed': 'This browser’s speech recognition is turned off.',
+  'audio-capture': 'No microphone was found.',
+  network: 'Speech recognition needs an internet connection.',
+  'language-not-supported': 'Speech recognition doesn’t support this language.',
+}
+
 /**
  * Listens while `active` (and while Sighty isn't talking, so it doesn't hear itself).
  * onFinal fires with each finished phrase.
@@ -177,6 +340,8 @@ export function useListen(active: boolean, onFinal: (text: string) => void, opts
   const speech = useSpeech()
   const [heard, setHeard] = useState<Heard>({ final: '', interim: '' })
   const [listening, setListening] = useState(false)
+  /** Why listening stopped for good, e.g. the mic is blocked. null while it's working. */
+  const [error, setError] = useState<string | null>(null)
   const cb = useRef(onFinal)
   useEffect(() => {
     cb.current = onFinal
@@ -208,7 +373,16 @@ export function useListen(active: boolean, onFinal: (text: string) => void, opts
         }
         if (interim) setHeard((h) => ({ ...h, interim }))
       }
-      rec.onerror = () => {}
+      rec.onerror = (e) => {
+        // 'no-speech' and 'aborted' are normal (a quiet moment, or another recogniser took over).
+        if (e.error === 'no-speech' || e.error === 'aborted') return
+        console.warn('[listen] speech recognition error:', e.error)
+        const fatal = FATAL_LISTEN_ERRORS[e.error]
+        if (fatal) {
+          stopped = true
+          setError(fatal)
+        }
+      }
       rec.onend = () => {
         setListening(false)
         // Browsers end a session after a pause; keep listening until the screen is done.
@@ -217,8 +391,8 @@ export function useListen(active: boolean, onFinal: (text: string) => void, opts
       try {
         rec.start()
         setListening(true)
-      } catch {
-        // already started
+      } catch (e) {
+        console.warn('[listen] could not start speech recognition:', e)
       }
     }
     begin()
@@ -230,15 +404,162 @@ export function useListen(active: boolean, onFinal: (text: string) => void, opts
     }
   }, [active, talking, continuous])
 
-  return { heard, listening, reset: () => setHeard({ final: '', interim: '' }) }
+  return { heard, listening, error, reset: () => setHeard({ final: '', interim: '' }) }
 }
+
+/**
+ * Calls onPause once someone has spoken and then gone quiet for `silenceMs`, judged from the mic's
+ * volume alone, so it works in browsers whose speech recognition is missing or failing.
+ * Also calls it after `maxMs` no matter what. onPause gets whether anyone spoke (true when the
+ * volume couldn't be read, e.g. audio is still locked). Returns a function that stops watching.
+ */
+export function watchForPause(stream: MediaStream, onPause: (spoke: boolean) => void, { silenceMs = 1500, maxMs = 30_000 } = {}) {
+  const ctx = audioContext()
+  if (!ctx) return () => {}
+  ctx.resume().catch(() => {})
+  const source = ctx.createMediaStreamSource(stream)
+  const analyser = ctx.createAnalyser()
+  analyser.fftSize = 1024
+  source.connect(analyser)
+  const samples = new Float32Array(analyser.fftSize)
+
+  const FRAME_MS = 50
+  const SPEECH_FRAMES = 4 // 200 ms of sound in a row counts as speech, so a click or bump doesn't
+  const started = Date.now()
+  let noiseFloor = 0.005 // background level, tracked as the quietest recent volume
+  let loudFrames = 0
+  let spoke = false
+  let lastSpeech = 0
+
+  const timer = setInterval(() => {
+    analyser.getFloatTimeDomainData(samples)
+    let sum = 0
+    for (const s of samples) sum += s * s
+    const volume = Math.sqrt(sum / samples.length)
+    // Falls straight to quiet moments, creeps up slowly (~4%/s) so a noisy street raises it.
+    noiseFloor = Math.min(volume, noiseFloor * 1.002 + 1e-6)
+    const now = Date.now()
+    if (volume > Math.max(noiseFloor * 3, 0.01)) {
+      loudFrames++
+      if (loudFrames >= SPEECH_FRAMES) spoke = true
+      if (spoke) lastSpeech = now
+    } else loudFrames = 0
+    if ((spoke && now - lastSpeech > silenceMs) || now - started > maxMs) {
+      stop()
+      onPause(spoke || ctx.state !== 'running')
+    }
+  }, FRAME_MS)
+
+  function stop() {
+    clearInterval(timer)
+    source.disconnect()
+  }
+  return stop
+}
+
+const canRecord =
+  typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+
+/**
+ * Listens while `active` (and while Sighty isn't talking) by recording one phrase at a time and
+ * sending it to the server's speech-to-text (ElevenLabs). Works on iPhones, where the browser's own
+ * recogniser misses most phrases. `off` turns true when the server has no speech-to-text set up.
+ */
+export function usePhraseListen(active: boolean, onText: (text: string) => void, { silenceMs = 700, maxMs = 6000 } = {}) {
+  const speech = useSpeech()
+  const talking = speech.status === 'speaking'
+  const [listening, setListening] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [off, setOff] = useState(!canRecord)
+  const cb = useRef(onText)
+  useEffect(() => {
+    cb.current = onText
+  })
+
+  useEffect(() => {
+    // Mic off while Sighty talks, so it doesn't hear itself (and iPhones keep playing on the speaker).
+    if (!active || talking || off) return
+    let stopped = false
+    let stream: MediaStream | null = null
+    let rec: MediaRecorder | null = null
+    let stopWatching = () => {}
+    const aborter = new AbortController()
+
+    const record = () => {
+      if (stopped || !stream) return
+      const r = new MediaRecorder(stream)
+      const chunks: Blob[] = []
+      let spoke = false
+      rec = r
+      r.ondataavailable = (e) => e.data.size && chunks.push(e.data)
+      r.onstop = () => {
+        if (stopped) return
+        record() // keep listening while this phrase is transcribed
+        const clip = new Blob(chunks, { type: r.mimeType || 'audio/mp4' })
+        if (!spoke || !clip.size) return
+        api.transcribe(clip, aborter.signal)
+          .then((text) => !stopped && text && cb.current(text))
+          .catch((e) => {
+            if (stopped) return
+            if (e instanceof ApiError && e.status === 503) setOff(true)
+            else console.warn('[listen] speech-to-text failed:', e)
+          })
+      }
+      r.start()
+      stopWatching = watchForPause(stream, (s) => {
+        spoke = s
+        if (r.state !== 'inactive') r.stop()
+      }, { silenceMs, maxMs })
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((s) => {
+        if (stopped) return s.getTracks().forEach((t) => t.stop())
+        stream = s
+        setError(null)
+        setListening(true)
+        record()
+      })
+      .catch((e) => {
+        if (stopped) return
+        console.warn('[listen] no microphone:', e)
+        setError(e?.name === 'NotAllowedError' ? 'Microphone access is blocked for this site.' : 'No microphone was found.')
+      })
+
+    return () => {
+      stopped = true
+      aborter.abort()
+      stopWatching()
+      if (rec && rec.state !== 'inactive') rec.stop()
+      stream?.getTracks().forEach((t) => t.stop())
+      setListening(false)
+    }
+  }, [active, talking, off, silenceMs, maxMs])
+
+  return { listening, error, off }
+}
+
+/**
+ * Hears whole phrases: the server's speech-to-text, or the browser's recogniser when the server
+ * can't. `interim` (live words) only comes from the browser's recogniser.
+ * Short commands suit the default 0.7 s pause; give dictation (emails) longer.
+ */
+export function usePhrases(active: boolean, onText: (text: string) => void, opts: { silenceMs?: number; maxMs?: number } = {}) {
+  const server = usePhraseListen(active, onText, opts)
+  const browser = useListen(active && server.off, onText)
+  return server.off
+    ? { listening: browser.listening, error: browser.error, interim: browser.heard.interim }
+    : { listening: server.listening, error: server.error, interim: '' }
+}
+
+/** Lowercase words only, so "Low-vision." matches "low vision". */
+const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim()
 
 /** Calls the matching handler when a phrase contains one of the keys (case-insensitive). */
 export function useVoiceCommands(commands: Record<string, () => void>, active = true) {
-  const keys = Object.keys(commands)
-  return useListen(active, (text) => {
-    const t = text.toLowerCase()
-    const key = keys.find((k) => t.includes(k.toLowerCase()))
+  return usePhrases(active, (text) => {
+    const t = ` ${words(text)} `
+    const key = Object.keys(commands).find((k) => t.includes(` ${words(k)} `))
     if (key) commands[key]()
   })
 }

@@ -33,7 +33,7 @@ def _gemini():
     if _client is None:
         from google import genai
 
-        _client = genai.Client(api_key=Config.GEMINI_API_KEY)
+        _client = genai.Client(vertexai=Config.GEMINI_VERTEX, api_key=Config.GEMINI_API_KEY)
     return _client
 
 

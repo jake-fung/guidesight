@@ -1,24 +1,21 @@
-"""Verifies the Firebase ID token the web app sends as `Authorization: Bearer <token>`."""
+"""Who is calling: each phone or browser makes a random device id on first open and sends it as
+`Authorization: Bearer <device id>`. That id is the user id. There is no login.
+
+Anyone who knows a device id can act as that device, so treat ids like passwords (they're random
+and never shown in the app).
+"""
+import re
 from functools import wraps
 
-from flask import current_app, g, jsonify, request
+from flask import g, jsonify, request
 
-from .config import Config
-
-DEV_UID = "dev-user"
+# Long enough to be unguessable from the app (a UUID), short enough to be a Firestore document id.
+_DEVICE_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 def verify_token(token: str) -> str | None:
-    if current_app.config.get("TESTING") or not Config.firebase_enabled():
-        # Mock mode: accept any token so the app works before Firebase is set up.
-        return DEV_UID if token else None
-
-    from firebase_admin import auth
-
-    try:
-        return auth.verify_id_token(token)["uid"]
-    except Exception:  # invalid, expired, or revoked
-        return None
+    """The user id for a device id, or None if it isn't one."""
+    return token if _DEVICE_ID.fullmatch(token or "") else None
 
 
 def require_auth(fn):

@@ -5,7 +5,7 @@ import { useApp, type Track } from '../state'
 import {
   Button, CodeBoxes, Gap, Hero, IconBadge, ListeningPill, Mascot, NavHeader, OptionCard, Screen, SpeakingBanner, TextField,
 } from '../ui'
-import { buzz, spokenToEmail, useAutoRead, useListen, useVoiceCommands, voice } from '../voice'
+import { buzz, spokenToEmail, useAutoRead, usePhrases, useSpeech, useVoiceCommands, voice } from '../voice'
 
 const WELCOME = 'Hi, I’m Sighty. How much can you see? Say “blind”, “low vision” or “I can see”.'
 
@@ -14,7 +14,7 @@ export function A0Tap() {
   function start() {
     voice.unlock() // this tap is what lets the page talk from now on
     buzz(80)
-    go('a1')
+    go('v1') // the setup chat asks "How much can you see?" itself
   }
   return (
     <Screen>
@@ -52,7 +52,8 @@ export function A1HowMuch() {
     setTimeout(() => go(track === 'blind' ? 'v1' : 'b1'), 350)
   }
 
-  useVoiceCommands({
+  const speech = useSpeech()
+  const mic = useVoiceCommands({
     'low vision': () => choose('low-vision'),
     'can see': () => choose('sighted'),
     blind: () => choose('blind'),
@@ -81,7 +82,10 @@ export function A1HowMuch() {
         <button type="button" onClick={() => go('a2')} className="t-label-m text-gs-brand underline-offset-2 active:underline">Sign in</button>
       </p>
       <Gap h={10} />
-      <ListeningPill>Listening for “blind”, “low vision” or “I can see”</ListeningPill>
+      <ListeningPill>
+        {mic.error ?? (mic.listening ? 'Listening for “blind”, “low vision” or “I can see”'
+          : speech.status === 'speaking' ? 'I’ll listen when Sighty finishes' : 'Starting the microphone…')}
+      </ListeningPill>
     </Screen>
   )
 }
@@ -95,12 +99,12 @@ export function A2SignInEmail() {
   const [note, setNote] = useState<string | null>(null)
   useAutoRead('Sign in. What’s your email? Tap the mic to say it.')
 
-  useListen(dictating, (text) => {
+  usePhrases(dictating, (text) => {
     const value = spokenToEmail(text)
     setEmail(value)
     setDictating(false)
     voice.say(`I heard ${value.split('').join(' ')}`)
-  })
+  }, { silenceMs: 1500, maxMs: 15_000 })
 
   function send() {
     if (!isEmail(email)) return setNote('That doesn’t look like an email yet.')
@@ -117,7 +121,7 @@ export function A2SignInEmail() {
       <h1 className="t-display-l">What’s your email?</h1>
       <Gap h={38} />
       <TextField label="Email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" placeholder="name@email.com"
-        value={email} onChange={(e) => setEmail(e.target.value)} onMic={() => setDictating((d) => !d)} micActive={dictating}
+        value={email} onChange={(e) => setEmail(e.target.value)} onMic={() => { voice.stop(); setDictating((d) => !d) }} micActive={dictating}
         onKeyDown={(e) => e.key === 'Enter' && send()} />
       <Gap h={14} />
       <p className="t-body-m flex items-center gap-2.5 rounded-2xl bg-gs-tint px-3.5 py-3">

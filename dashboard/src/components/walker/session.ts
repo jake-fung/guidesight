@@ -216,6 +216,11 @@ export function useWalkSession(link: LiveLink) {
     }
   }, [active, describe, setEventHandler])
 
+  /** Called with every alert from a frame, e.g. so Guide mode can speak it. Stable across renders. */
+  const onAlert = useCallback((fn: ((a: Alert, trigger: FrameTrigger) => void) | null) => {
+    onAlertRef.current = fn
+  }, [])
+
   // Release the camera when the app goes away.
   useEffect(() => () => stream.current?.getTracks().forEach((t) => t.stop()), [])
 
@@ -223,8 +228,7 @@ export function useWalkSession(link: LiveLink) {
     active, hasCamera, status, lastAlert, obstacle, startedAt, endedAt, alerts, walked, spotted,
     attachVideo, requestMedia, start, end, describe, ask,
     clearObstacle: () => setObstacle(null),
-    /** Called with every alert from a frame, e.g. so Guide mode can speak it. */
-    onAlert: (fn: ((a: Alert, trigger: FrameTrigger) => void) | null) => { onAlertRef.current = fn },
+    onAlert,
     /** Mic stream for recording a question (shares the camera's permission prompt when possible). */
     micStream: async () => {
       const audio = stream.current?.getAudioTracks() ?? []

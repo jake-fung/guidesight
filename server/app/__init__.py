@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 
 from .config import Config
 from .live import init_live
@@ -15,28 +16,34 @@ def create_app(testing: bool = False) -> Flask:
     init_store(app, force_memory=testing)
     init_live(app)
 
-    from .routes.dashboard import bp as dashboard_bp
     from .routes.harness import bp as harness_bp
+    from .routes.me import bp as me_bp
     from .routes.settings import bp as settings_bp
+    from .routes.setup import bp as setup_bp
     from .routes.walks import bp as walks_bp
+    from .routes.tts import bp as tts_bp
+    from .routes.stt import bp as stt_bp
 
+    app.register_blueprint(me_bp, url_prefix="/api/me")
+    app.register_blueprint(setup_bp, url_prefix="/api/setup")
     app.register_blueprint(walks_bp, url_prefix="/api/walks")
-    app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(harness_bp, url_prefix="/api/harness")
+    app.register_blueprint(tts_bp, url_prefix="/api/tts")
+    app.register_blueprint(stt_bp, url_prefix="/api/stt")
 
-    if not Config.firebase_enabled():
-        from .routes.dev import bp as dev_bp
-
-        app.register_blueprint(dev_bp, url_prefix="/api/dev")
+    @app.errorhandler(HTTPException)
+    def json_error(e):
+        # JSON instead of Flask's HTML error page, so the app can show or speak the reason.
+        return jsonify(error=e.description), e.code
 
     @app.get("/api/health")
     def health():
         return jsonify(
             status="ok",
-            firebase=Config.firebase_enabled(),
+            firestore=Config.firestore_enabled(),
             gemini=bool(Config.GEMINI_API_KEY),
-            assemblyai=bool(Config.ASSEMBLYAI_API_KEY),
+            elevenlabs=bool(Config.ELEVENLABS_API_KEY),
         )
 
     return app
