@@ -90,14 +90,15 @@ def frame(walk_id):
 @bp.post("/<walk_id>/voice")
 @require_auth
 def voice(walk_id):
-    """multipart/form-data: audio (required), image (optional jpeg), lat/lng (optional)."""
+    """multipart/form-data: audio or question (typed text, one is required), image (optional jpeg), lat/lng (optional)."""
     _walk_or_404(walk_id)
     audio = request.files.get("audio")
-    if audio is None:
-        abort(400, description="audio file is required")
+    typed = (request.form.get("question") or "").strip()
+    if audio is None and not typed:
+        abort(400, description="audio file or question text is required")
     image = request.files.get("image")
 
-    question = stt.transcribe(audio.read())
+    question = typed or stt.transcribe(audio.read())
     answer = vision.answer_question(image.read() if image else None, question)
     settings = get_store().get_settings(g.uid)
     location = None

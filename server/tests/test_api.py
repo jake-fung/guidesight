@@ -77,3 +77,12 @@ def test_obstacle_event_from_ultrasonic_harness(client):
     summary = client.get("/api/dashboard/summary", headers=AUTH).get_json()
     assert summary["walks"][0]["obstacles"] == 2
     assert summary["stops"][0]["type"] == "obstacle"
+
+
+def test_voice_accepts_typed_question(client):
+    wid = client.post("/api/walks", headers=AUTH).get_json()["id"]
+    r = client.post(f"/api/walks/{wid}/voice", headers=AUTH,
+                    data={"question": "Is there a bench nearby?"}, content_type="multipart/form-data")
+    assert r.status_code == 200 and r.get_json()["transcript"] == "Is there a bench nearby?"
+    r = client.post(f"/api/walks/{wid}/voice", headers=AUTH, data={}, content_type="multipart/form-data")
+    assert r.status_code == 400
