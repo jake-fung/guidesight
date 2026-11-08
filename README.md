@@ -24,8 +24,15 @@ Built for HackCamp 2026.
 ## Features
 
 - **Obstacle sensing** — ultrasonic sensor on the harness buzzes the handle as things get closer, even offline.
-- **Scene description** — Gemini Vision looks at the phone's camera and describes what's ahead.
+- **Scene description** — Gemini Vision looks at the phone's camera every 15 s (6 s while guiding),
+  and right away when the harness senses something.
+- **Hazard tiers** — only ground hazards are spoken. Trip hazards (curbs, ramps, potholes) get a
+  warning; stairs and drop-offs are always urgent and open a stop screen within 1 m; dangers like a red
+  light or moving traffic open the stop screen at any distance.
 - **Guide mode** — spoken turn-by-turn walking directions via Google Maps.
+- **Where am I?** — the street address or place you're at, plus which way you're facing.
+- **Problem alerts** — the app speaks up when the camera is blocked, the sensor drops off, or the server
+  can't be reached.
 - **Ask mode** — voice or typed questions, answered aloud (ElevenLabs, or the phone's built-in voice).
 - **Read mode** — reads text from signs, menus, and buses aloud.
 - **No login** — each phone gets a random device id on first open; no account to set up.
@@ -35,7 +42,7 @@ Built for HackCamp 2026.
 - Flask + flask-sock server, Firestore (`firebase-admin`) for storage — optional, falls back to in-memory.
 - `google-genai` (Gemini Vision) for scene description.
 - ElevenLabs for speech-to-text (questions) and text-to-speech (spoken alerts).
-- Google Maps — Places API (New) + Routes API — for walking directions.
+- Google Maps — Places API (New) + Routes API for walking directions, Geocoding API for "Where am I?".
 - React + Vite + Tailwind v4 walker web app.
 - ESP32 + HC-SR04 ultrasonic sensor + buzzer firmware.
 
@@ -44,16 +51,16 @@ Built for HackCamp 2026.
 ![Architecture overview](docs/architecture-overview.svg)
 
 ```
- ESP32 harness        ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore
- (HC-SR04, buzzer)   ◀──buzz───┘   ▲     │
+ ESP32 harness        ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Google Maps / Firestore
+ (HC-SR04, buzzer)   ◀──buzz───┘   ▲     │       (hazard filter: danger · drop · trip)
                                    │     └──live events──▶ walker web app on the phone (/walk)
                     frames, voice ─┘                        (camera, mic, GPS, speech)
 ```
 
 | Folder              | What                                                              | Stack |
 |---------------------|-------------------------------------------------------------------|-------|
-| `server/`           | API: profile & first-run setup, walks, frames, voice/typed questions, walking directions, TTS, live harness link | Flask, flask-sock, firebase-admin (Firestore), google-genai, Google Maps (Places + Routes), ElevenLabs |
-| `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Where to?, Guide mode with spoken turn-by-turn directions, Read text, Settings). No login | React, Vite, Tailwind v4 |
+| `server/`           | API: profile & first-run setup, walks, frames + hazard filter, voice/typed questions, walking directions, "Where am I?", STT, TTS, live harness link | Flask, flask-sock, firebase-admin (Firestore), google-genai, Google Maps (Places + Routes + Geocoding), ElevenLabs |
+| `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Where to?, Guide mode with spoken turn-by-turn directions, Where am I?, Read text, Settings). No login | React, Vite, Tailwind v4 |
 | `firmware/esp32/`   | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | ESP32 Dev Module, ArduinoHttpClient |
 
 ## Getting Started
@@ -162,16 +169,20 @@ letters, digits, `-` or `_`. Clearing the site's data on the phone starts over a
 | `POST /api/setup/sensor`              | `{harness_id}`                                    | `{harness_id, online, buzzed, me}`, buzzes the sensor |
 | `POST /api/setup/complete`            | –                                                 | same as `GET /api/me`           |
 | `POST /api/routes`                    | `{origin: {lat, lng}, destination: "Tim Hortons" \| {lat, lng, name?}}` | `{destination: {name, address, location}, distance_m, duration_s, steps: [{instruction, maneuver, distance_m, points, ...}]}`; 404 = not found |
+| `POST /api/routes/where`              | `{location: {lat, lng}}`                          | `{address, place}` (either may be `null`) |
 | `POST /api/walks`                     | –                                                 | `{id, started_at, ...}`         |
 | `POST /api/walks/:id/harness-event`   | `{type: "obstacle"\|"stop"\|"pull", motion, location}` | `{event, capture_frame}`   |
-| `POST /api/walks/:id/frame`           | `{image: base64 jpeg, trigger, location}`         | `{alert, scene}`, buzzes the harness. `alert.obstacle` = `{what, distance_m, clock}`, `alert.avoid` = `left\|right\|stop\|none` |
+| `POST /api/walks/:id/frame`           | `{image: base64 jpeg, trigger, location}`         | `{alert, scene}`, buzzes the harness (see `alert` below) |
 | `POST /api/walks/:id/voice`           | multipart: `audio`, optional `image`, `lat`, `lng`| `{transcript, alert}`           |
 | `POST /api/walks/:id/end`             | –                                                 | walk                            |
 | `POST /api/tts`                       | `{text, speed}`                                   | `audio/mpeg` clip; 503 without an ElevenLabs key |
+| `POST /api/stt`                       | multipart: `audio` (one short phrase)             | `{transcript}`; 503 without an ElevenLabs key |
+| `POST /api/stt/token`                 | –                                                 | `{token, model_id}`, single-use token for live transcription (voice setup); 503 without an ElevenLabs key |
 | `GET  /api/walks/:id`                 | –                                                 | `{walk, events}`                |
 | `GET/PUT /api/settings`               | voice, alert & accessibility preferences, `harness_id` | settings                   |
 | `GET  /api/harness/status`            | –                                                 | `{harness_id, online}`          |
 | `POST /api/harness/buzz`              | `{pattern: "short"\|"double"\|"long"}`            | `{delivered}`                   |
+| `GET  /api/health`                    | – (no auth)                                       | `{status, firestore, gemini, elevenlabs, maps}`, which services have keys |
 
 Errors come back as `{error: "<reason>"}`.
 
@@ -196,8 +207,20 @@ Settings also hold the accessibility options: `text_size` (`default`|`large`|`ex
 `high_contrast`, `read_screen_aloud`, `zoom`, `voice_control`, plus `speech_rate` (0.5–2.0) and
 `haptics_enabled` ("Vibration alerts").
 
-`alert` is `{speak, urgency, haptic: "short"|"double"|"long"|null, speech_rate}`. The phone speaks it
-with the browser's speech synthesis; the server sends `haptic` straight to the harness.
+`alert` (from `server/app/services/alerts.py`) is:
+
+| Field | Meaning |
+|---|---|
+| `speak`, `urgency`, `speech_rate` | What to say and how urgently |
+| `haptic` | `short`\|`double`\|`long`\|`null`; the server sends it straight to the harness |
+| `obstacle`, `avoid` | `{what, distance_m, clock}` and `left`\|`right`\|`stop`\|`none` |
+| `drop` | Stairs or a drop-off, `{what, distance_m}`; always high urgency |
+| `trip` | Something low to trip on (curb, ramp, pothole), `{what, distance_m}`; spoken, no stop screen |
+| `danger` | Stop now: a red light, moving traffic, or a `drop` within 1 m; opens the stop screen |
+| `view` | `ok`\|`blocked`\|`away`, so the app can say when the camera can't see ahead |
+
+The phone speaks only ground hazards (`drop`, `trip`, `danger`), through ElevenLabs or the phone's
+own voice. Doors, people and furniture are not announced.
 
 ## Live link (WebSockets)
 
@@ -205,11 +228,12 @@ Defined in `server/app/live.py`. The first message on each socket authenticates 
 
 - `/api/harness/ws` (harness):
   - harness → server: `{"type":"hello","id":"gs-…","key":"…"}`, then `{"type":"obstacle","cm":85}`
-    and `ping` every 15 s
+    (or `stop`/`pull` with `accel`) and `ping` every 15 s
   - server → harness: `short` | `double` | `long` (buzz), or `pong`
 - `/api/live` (walker app):
   - phone → server: `{"type":"auth","token":"<device id>"}`, then `ping` every 25 s
-  - server → phone: `{"type":"harness_event","event":{...}}` and `{"type":"harness_status","online":true}`
+  - server → phone: `{"type":"harness_event","event":{...}}` and
+    `{"type":"harness_status","harness_id":"gs-…","online":true}`
 
 A harness belongs to the user whose settings have its `harness_id`.
 

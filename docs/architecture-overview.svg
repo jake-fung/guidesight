@@ -1,175 +1,194 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2100 1290" font-family="Arial, Helvetica, sans-serif">
-  <rect width="2100" height="1290" fill="#000000"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2100 1240" font-family="Arial, Helvetica, sans-serif">
+  <rect width="2100" height="1240" fill="#000000"/>
 
   <text x="60" y="70" fill="#ffffff" font-size="48" font-weight="bold">GuideSight — Architecture Overview</text>
 
-  <!-- if false loop -->
-  <path d="M 627 120 L 627 85 L 225 85 L 225 160" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="225,160 216,144 234,144" fill="#ffffff"/>
-  <text x="385" y="78" fill="#9ca3af" font-size="20">if false</text>
+  <!-- ===== Row 1: getting started ===== -->
 
-  <!-- Login / Register -->
+  <!-- Open the app -->
   <rect x="60" y="160" width="330" height="160" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
   <line x1="60" y1="205" x2="390" y2="205" stroke="#ffffff" stroke-width="2"/>
-  <text x="225" y="192" fill="#ffffff" font-size="24" text-anchor="middle">Login / Register</text>
-  <text x="225" y="248" fill="#ffffff" font-size="20" text-anchor="middle">Google sign-in,</text>
-  <text x="225" y="276" fill="#ffffff" font-size="20" text-anchor="middle">screen-reader friendly</text>
+  <text x="225" y="192" fill="#ffffff" font-size="24" text-anchor="middle">Open the app</text>
+  <text x="225" y="248" fill="#ffffff" font-size="20" text-anchor="middle">Random device ID,</text>
+  <text x="225" y="276" fill="#ffffff" font-size="20" text-anchor="middle">no login or account</text>
 
   <path d="M 390 240 L 480 240" fill="none" stroke="#ffffff" stroke-width="2"/>
   <polygon points="480,240 466,232 466,248" fill="#ffffff"/>
 
-  <!-- Firebase Auth -->
-  <rect x="480" y="120" width="235" height="235" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <path d="M 597 155 C 580 190 560 205 560 235 C 560 263 580 280 597 280 C 614 280 634 263 634 235 C 634 215 620 205 614 190 C 610 210 600 212 597 200 C 592 215 585 220 585 235 C 585 250 592 258 597 258 C 603 258 609 250 609 240"
-    fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="597" y="330" fill="#ffffff" font-size="22" text-anchor="middle">Firebase</text>
-  <text x="597" y="356" fill="#ffffff" font-size="22" text-anchor="middle">Authentication</text>
+  <!-- First-run Setup -->
+  <rect x="480" y="160" width="520" height="160" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <line x1="480" y1="205" x2="1000" y2="205" stroke="#ffffff" stroke-width="2"/>
+  <text x="740" y="192" fill="#ffffff" font-size="24" text-anchor="middle">First-run Setup</text>
+  <text x="740" y="248" fill="#ffffff" font-size="20" text-anchor="middle">Name · camera · microphone</text>
+  <text x="740" y="276" fill="#ffffff" font-size="20" text-anchor="middle">Pair sensor by its ID (over Wi-Fi)</text>
 
-  <path d="M 715 240 L 850 240" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="850,240 836,232 836,248" fill="#ffffff"/>
+  <path d="M 1000 240 L 1090 240" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <polygon points="1090,240 1076,232 1076,248" fill="#ffffff"/>
 
-  <!-- Setup -->
-  <rect x="850" y="160" width="425" height="160" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <line x1="850" y1="205" x2="1275" y2="205" stroke="#ffffff" stroke-width="2"/>
-  <text x="1062" y="192" fill="#ffffff" font-size="24" text-anchor="middle">Setup</text>
-  <text x="1062" y="248" fill="#ffffff" font-size="20" text-anchor="middle">Pair wearable via Bluetooth,</text>
-  <text x="1062" y="276" fill="#ffffff" font-size="20" text-anchor="middle">choose voice speed &amp; detail level</text>
+  <!-- Settings -->
+  <rect x="1090" y="160" width="470" height="160" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <line x1="1090" y1="205" x2="1560" y2="205" stroke="#ffffff" stroke-width="2"/>
+  <text x="1325" y="192" fill="#ffffff" font-size="24" text-anchor="middle">Settings</text>
+  <text x="1325" y="248" fill="#ffffff" font-size="20" text-anchor="middle">Voice speed &amp; detail level,</text>
+  <text x="1325" y="276" fill="#ffffff" font-size="20" text-anchor="middle">text size, contrast, zoom</text>
 
-  <path d="M 1275 240 L 1560 240" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="1560,240 1546,232 1546,248" fill="#ffffff"/>
+  <!-- Mock mode note -->
+  <rect x="1660" y="160" width="380" height="160" rx="4" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="10 8"/>
+  <text x="1850" y="200" fill="#9ca3af" font-size="22" text-anchor="middle">No API keys?</text>
+  <text x="1850" y="248" fill="#9ca3af" font-size="19" text-anchor="middle">Every service gives canned</text>
+  <text x="1850" y="276" fill="#9ca3af" font-size="19" text-anchor="middle">answers; data kept in memory</text>
 
-  <!-- Spoken Alerts -->
-  <rect x="1560" y="160" width="480" height="160" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <line x1="1560" y1="205" x2="2040" y2="205" stroke="#ffffff" stroke-width="2"/>
-  <text x="1800" y="192" fill="#ffffff" font-size="24" text-anchor="middle">Spoken Alerts</text>
-  <text x="1800" y="248" fill="#ffffff" font-size="19" text-anchor="middle">"Person 2 m ahead" · "Step down" ·</text>
-  <text x="1800" y="276" fill="#ffffff" font-size="19" text-anchor="middle">"This is the 99 B-Line" — via earbuds</text>
-
-  <!-- Users icon -->
+  <!-- Walker icon -->
   <circle cx="200" cy="395" r="33" fill="#ea4335"/>
   <circle cx="250" cy="395" r="33" fill="#34a853"/>
   <circle cx="225" cy="430" r="33" fill="#4285f4"/>
-  <text x="225" y="500" fill="#ffffff" font-size="22" text-anchor="middle">Users</text>
-  <path d="M 225 460 L 225 160" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="225,160 217,176 233,176" fill="#ffffff"/>
+  <text x="225" y="500" fill="#ffffff" font-size="22" text-anchor="middle">Walker</text>
+  <path d="M 225 362 L 225 320" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <polygon points="225,320 217,336 233,336" fill="#ffffff"/>
 
-  <!-- Wearable -->
-  <rect x="60" y="555" width="430" height="170" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <line x1="60" y1="600" x2="490" y2="600" stroke="#ffffff" stroke-width="2"/>
-  <text x="275" y="587" fill="#ffffff" font-size="24" text-anchor="middle">Wearable (chest clip)</text>
-  <text x="275" y="635" fill="#ffffff" font-size="19" text-anchor="middle">ESP32 + HC-SR04 ultrasonic sensor</text>
-  <text x="275" y="663" fill="#ffffff" font-size="19" text-anchor="middle">Obstacle &lt; 2 m → instant vibration</text>
-  <text x="275" y="691" fill="#ffffff" font-size="19" text-anchor="middle">Works offline, no cloud delay</text>
+  <!-- Settings -> Phone App -->
+  <path d="M 1325 320 L 1325 555" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <polygon points="1325,555 1317,539 1333,539" fill="#ffffff"/>
 
-  <path d="M 490 640 L 620 640" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="620,640 606,632 606,648" fill="#ffffff"/>
-  <polygon points="490,640 504,632 504,648" fill="#ffffff"/>
-  <text x="555" y="625" fill="#ffffff" font-size="19" text-anchor="middle">BLE</text>
+  <!-- ===== Row 2: the walk ===== -->
 
-  <!-- Phone App -->
-  <rect x="620" y="555" width="430" height="170" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <line x1="620" y1="600" x2="1050" y2="600" stroke="#ffffff" stroke-width="2"/>
-  <text x="835" y="587" fill="#ffffff" font-size="24" text-anchor="middle">Phone App</text>
-  <text x="835" y="635" fill="#ffffff" font-size="19" text-anchor="middle">Walk mode: scans camera every ~3 s</text>
-  <text x="835" y="663" fill="#ffffff" font-size="19" text-anchor="middle">+ when wearable detects an obstacle</text>
-  <text x="835" y="691" fill="#ffffff" font-size="19" text-anchor="middle">Ask mode: voice question + photo</text>
+  <!-- Harness -->
+  <rect x="60" y="555" width="420" height="190" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <line x1="60" y1="600" x2="480" y2="600" stroke="#ffffff" stroke-width="2"/>
+  <text x="270" y="587" fill="#ffffff" font-size="24" text-anchor="middle">Harness (ESP32)</text>
+  <text x="270" y="635" fill="#ffffff" font-size="18" text-anchor="middle">HC-SR04 ultrasonic sensor + buzzer</text>
+  <text x="270" y="663" fill="#ffffff" font-size="18" text-anchor="middle">Beeps faster as things near, offline too</text>
+  <text x="270" y="691" fill="#ffffff" font-size="18" text-anchor="middle">Event &lt; 1.5 m, again each 50 cm closer</text>
+  <text x="270" y="719" fill="#ffffff" font-size="18" text-anchor="middle">Buzzes the pattern the server sends</text>
 
-  <path d="M 1050 640 L 1180 640" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="1180,640 1166,632 1166,648" fill="#ffffff"/>
-  <polygon points="1050,640 1064,632 1064,648" fill="#ffffff"/>
-  <text x="1115" y="625" fill="#ffffff" font-size="19" text-anchor="middle">frames</text>
+  <!-- Harness <-> Server -->
+  <path d="M 480 650 L 600 650" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <polygon points="600,650 586,642 586,658" fill="#ffffff"/>
+  <polygon points="480,650 494,642 494,658" fill="#ffffff"/>
+  <text x="540" y="634" fill="#ffffff" font-size="17" text-anchor="middle">Wi-Fi</text>
+  <text x="540" y="678" fill="#9ca3af" font-size="16" text-anchor="middle">WebSocket</text>
 
   <!-- Flask Server -->
-  <rect x="1180" y="555" width="250" height="170" rx="4" fill="none" stroke="#ffffff" stroke-width="3"/>
-  <text x="1305" y="650" fill="#ffffff" font-size="26" text-anchor="middle">Flask Server</text>
+  <rect x="600" y="555" width="320" height="190" rx="4" fill="none" stroke="#ffffff" stroke-width="3"/>
+  <text x="760" y="642" fill="#ffffff" font-size="26" text-anchor="middle">Flask Server</text>
+  <text x="760" y="676" fill="#9ca3af" font-size="17" text-anchor="middle">REST API + live link</text>
+  <text x="760" y="700" fill="#9ca3af" font-size="17" text-anchor="middle">(flask-sock)</text>
 
-  <path d="M 1430 640 L 1560 640" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="1560,640 1546,632 1546,648" fill="#ffffff"/>
+  <!-- Server <-> Phone -->
+  <path d="M 920 650 L 1040 650" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <polygon points="1040,650 1026,642 1026,658" fill="#ffffff"/>
+  <polygon points="920,650 934,642 934,658" fill="#ffffff"/>
+  <text x="980" y="634" fill="#ffffff" font-size="17" text-anchor="middle">HTTPS</text>
+  <text x="980" y="678" fill="#9ca3af" font-size="16" text-anchor="middle">+ live WS</text>
 
-  <!-- Trip History -->
-  <rect x="1560" y="555" width="480" height="170" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <line x1="1560" y1="600" x2="2040" y2="600" stroke="#ffffff" stroke-width="2"/>
-  <text x="1800" y="587" fill="#ffffff" font-size="24" text-anchor="middle">Trip History (optional)</text>
-  <text x="1800" y="648" fill="#ffffff" font-size="19" text-anchor="middle">React + Tailwind: past trips &amp;</text>
-  <text x="1800" y="676" fill="#ffffff" font-size="19" text-anchor="middle">hazard hotspots for user / family</text>
+  <!-- Phone App -->
+  <rect x="1040" y="555" width="520" height="190" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <line x1="1040" y1="600" x2="1560" y2="600" stroke="#ffffff" stroke-width="2"/>
+  <text x="1300" y="587" fill="#ffffff" font-size="24" text-anchor="middle">Phone Web App</text>
+  <text x="1300" y="635" fill="#ffffff" font-size="18" text-anchor="middle">Home · Where to? · Guide · Ask · Read text</text>
+  <text x="1300" y="663" fill="#ffffff" font-size="18" text-anchor="middle">"Where am I?" with compass direction</text>
+  <text x="1300" y="691" fill="#ffffff" font-size="18" text-anchor="middle">Camera frame every 15 s (6 s when guiding)</text>
+  <text x="1300" y="719" fill="#ffffff" font-size="18" text-anchor="middle">+ right away when the harness sees something</text>
 
-  <!-- Setup -> Phone App -->
-  <path d="M 1062 320 L 1062 555" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="1062,555 1054,539 1070,539" fill="#ffffff"/>
+  <path d="M 1560 650 L 1680 650" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <polygon points="1680,650 1666,642 1666,658" fill="#ffffff"/>
 
-  <!-- Flask Server -> Spoken Alerts -->
-  <path d="M 1305 555 L 1305 320" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <polygon points="1305,320 1297,336 1313,336" fill="#ffffff"/>
+  <!-- Walker hears & feels -->
+  <rect x="1680" y="555" width="360" height="190" rx="4" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <line x1="1680" y1="600" x2="2040" y2="600" stroke="#ffffff" stroke-width="2"/>
+  <text x="1860" y="587" fill="#ffffff" font-size="24" text-anchor="middle">Walker hears &amp; feels</text>
+  <text x="1860" y="635" fill="#ffffff" font-size="18" text-anchor="middle">"Stairs 1 m ahead, stop"</text>
+  <text x="1860" y="663" fill="#ffffff" font-size="18" text-anchor="middle">Voice in earbuds</text>
+  <text x="1860" y="691" fill="#ffffff" font-size="18" text-anchor="middle">+ buzz on the harness</text>
+  <text x="1860" y="719" fill="#ffffff" font-size="18" text-anchor="middle">+ stop screen for danger</text>
 
-  <!-- bottom bus -->
-  <path d="M 1305 725 L 1305 945 L 270 945" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <path d="M 1305 945 L 670 945" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <path d="M 1305 945 L 1070 945" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <path d="M 1305 945 L 1440 945 L 1840 945" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <!-- ===== Row 3: services behind the server ===== -->
 
-  <!-- 5 service nodes -->
-  <!-- Speech to text -->
-  <g>
-    <circle cx="270" cy="990" r="65" fill="#4338ca"/>
-    <rect x="245" y="975" width="10" height="30" fill="#ffffff"/>
-    <rect x="263" y="965" width="10" height="50" fill="#ffffff"/>
-    <rect x="281" y="975" width="10" height="30" fill="#ffffff"/>
-    <path d="M 270 945 L 270 725" fill="none" stroke="#ffffff" stroke-width="2"/>
-    <polygon points="270,945 262,929 278,929" fill="#ffffff"/>
-    <text x="270" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Speech-to-Text</text>
-    <text x="270" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">AssemblyAI / on-device</text>
-    <text x="270" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">Turns "what does that</text>
-    <text x="270" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">sign say?" into text</text>
+  <!-- bus -->
+  <path d="M 760 745 L 760 880" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <path d="M 225 880 L 1875 880" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2">
+    <path d="M 225 880 L 225 925"/>
+    <path d="M 555 880 L 555 925"/>
+    <path d="M 885 880 L 885 925"/>
+    <path d="M 1215 880 L 1215 925"/>
+    <path d="M 1545 880 L 1545 925"/>
+    <path d="M 1875 880 L 1875 925"/>
+  </g>
+  <g fill="#ffffff">
+    <polygon points="225,925 217,909 233,909"/>
+    <polygon points="555,925 547,909 563,909"/>
+    <polygon points="885,925 877,909 893,909"/>
+    <polygon points="1215,925 1207,909 1223,909"/>
+    <polygon points="1545,925 1537,909 1553,909"/>
+    <polygon points="1875,925 1867,909 1883,909"/>
   </g>
 
-  <!-- Gemini -->
+  <!-- Speech-to-Text -->
   <g>
-    <circle cx="670" cy="990" r="65" fill="#ffffff"/>
-    <path d="M 670 950 L 682 978 L 710 990 L 682 1002 L 670 1030 L 658 1002 L 630 990 L 658 978 Z" fill="#4285f4"/>
-    <path d="M 670 945 L 670 725" fill="none" stroke="#ffffff" stroke-width="2"/>
-    <polygon points="670,945 662,929 678,929" fill="#ffffff"/>
-    <text x="670" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Gemini Vision API</text>
-    <text x="670" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">Returns JSON: hazard,</text>
-    <text x="670" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">direction, distance, text</text>
-    <text x="670" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">read from signs &amp; buses</text>
+    <circle cx="225" cy="990" r="65" fill="#4338ca"/>
+    <rect x="200" y="975" width="10" height="30" fill="#ffffff"/>
+    <rect x="218" y="965" width="10" height="50" fill="#ffffff"/>
+    <rect x="236" y="975" width="10" height="30" fill="#ffffff"/>
+    <text x="225" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Speech-to-Text</text>
+    <text x="225" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">ElevenLabs Scribe</text>
+    <text x="225" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">Voice questions; setup</text>
+    <text x="225" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">answers stream live</text>
   </g>
 
-  <!-- Hazard filter -->
+  <!-- Gemini Vision -->
   <g>
-    <circle cx="1070" cy="990" r="65" fill="#dc2626"/>
-    <path d="M 1070 955 L 1098 967 L 1098 995 C 1098 1013 1085 1025 1070 1030 C 1055 1025 1042 1013 1042 995 L 1042 967 Z" fill="none" stroke="#ffffff" stroke-width="4"/>
-    <path d="M 1055 992 L 1066 1004 L 1088 978" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M 1070 945 L 1070 725" fill="none" stroke="#ffffff" stroke-width="2"/>
-    <polygon points="1070,945 1062,929 1078,929" fill="#ffffff"/>
-    <text x="1070" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Hazard Filter</text>
-    <text x="1070" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">Ranks urgency, drops</text>
-    <text x="1070" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">repeats so users aren't</text>
-    <text x="1070" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">spammed with alerts</text>
+    <circle cx="555" cy="990" r="65" fill="#ffffff"/>
+    <path d="M 555 950 L 567 978 L 595 990 L 567 1002 L 555 1030 L 543 1002 L 515 990 L 543 978 Z" fill="#4285f4"/>
+    <text x="555" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Gemini Vision</text>
+    <text x="555" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">JSON: obstacle, clock</text>
+    <text x="555" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">direction, distance, drops,</text>
+    <text x="555" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">trips, sign &amp; bus text</text>
+  </g>
+
+  <!-- Hazard Filter -->
+  <g>
+    <circle cx="885" cy="990" r="65" fill="#dc2626"/>
+    <path d="M 885 955 L 913 967 L 913 995 C 913 1013 900 1025 885 1030 C 870 1025 857 1013 857 995 L 857 967 Z" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <path d="M 870 992 L 881 1004 L 903 978" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="885" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Hazard Filter</text>
+    <text x="885" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">Danger · drop · trip tiers</text>
+    <text x="885" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">Stairs ≤ 1 m → stop screen</text>
+    <text x="885" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">Step left / right / stop</text>
+  </g>
+
+  <!-- Google Maps -->
+  <g>
+    <circle cx="1215" cy="990" r="65" fill="#34a853"/>
+    <path d="M 1215 1032 C 1195 1007 1185 993 1185 978 A 30 30 0 0 1 1245 978 C 1245 993 1235 1007 1215 1032 Z" fill="#ffffff"/>
+    <circle cx="1215" cy="978" r="11" fill="#34a853"/>
+    <text x="1215" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Google Maps</text>
+    <text x="1215" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">Places + Routes:</text>
+    <text x="1215" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">walking directions</text>
+    <text x="1215" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">Geocoding: "Where am I?"</text>
   </g>
 
   <!-- Firestore -->
   <g>
-    <circle cx="1440" cy="990" r="65" fill="#f59e0b"/>
-    <ellipse cx="1440" cy="970" rx="28" ry="10" fill="none" stroke="#ffffff" stroke-width="4"/>
-    <path d="M 1412 970 L 1412 1010 C 1412 1016 1424 1021 1440 1021 C 1456 1021 1468 1016 1468 1010 L 1468 970" fill="none" stroke="#ffffff" stroke-width="4"/>
-    <path d="M 1412 990 C 1412 996 1424 1001 1440 1001 C 1456 1001 1468 996 1468 990" fill="none" stroke="#ffffff" stroke-width="4"/>
-    <path d="M 1440 945 L 1440 725" fill="none" stroke="#ffffff" stroke-width="2"/>
-    <polygon points="1440,945 1432,929 1448,929" fill="#ffffff"/>
-    <text x="1440" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Firebase Firestore</text>
-    <text x="1440" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">User settings + trip</text>
-    <text x="1440" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">logs (hazards, GPS)</text>
+    <circle cx="1545" cy="990" r="65" fill="#f59e0b"/>
+    <ellipse cx="1545" cy="970" rx="28" ry="10" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <path d="M 1517 970 L 1517 1010 C 1517 1016 1529 1021 1545 1021 C 1561 1021 1573 1016 1573 1010 L 1573 970" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <path d="M 1517 990 C 1517 996 1529 1001 1545 1001 C 1561 1001 1573 996 1573 990" fill="none" stroke="#ffffff" stroke-width="4"/>
+    <text x="1545" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Firestore (optional)</text>
+    <text x="1545" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">Profile, setup, settings</text>
+    <text x="1545" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">+ walk events per device ID</text>
+    <text x="1545" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">In memory without a key</text>
   </g>
 
-  <!-- TTS -->
+  <!-- Text-to-Speech -->
   <g>
-    <circle cx="1840" cy="990" r="65" fill="#9333ea"/>
-    <polygon points="1800,980 1818,980 1832,966 1832,1014 1818,1000 1800,1000" fill="#ffffff"/>
-    <path d="M 1842 975 A 24 24 0 0 1 1842 1005" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
-    <path d="M 1850 965 A 40 40 0 0 1 1850 1015" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
-    <path d="M 1840 945 L 1840 725" fill="none" stroke="#ffffff" stroke-width="2"/>
-    <polygon points="1840,945 1832,929 1848,929" fill="#ffffff"/>
-    <text x="1840" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Text-to-Speech</text>
-    <text x="1840" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">Speaks the alert in</text>
-    <text x="1840" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">under ~8 words</text>
+    <circle cx="1875" cy="990" r="65" fill="#9333ea"/>
+    <polygon points="1835,980 1853,980 1867,966 1867,1014 1853,1000 1835,1000" fill="#ffffff"/>
+    <path d="M 1877 975 A 24 24 0 0 1 1877 1005" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 1885 965 A 40 40 0 0 1 1885 1015" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+    <text x="1875" y="1095" fill="#ffffff" font-size="22" font-weight="bold" text-anchor="middle">Text-to-Speech</text>
+    <text x="1875" y="1130" fill="#9ca3af" font-size="17" text-anchor="middle">ElevenLabs Flash voice</text>
+    <text x="1875" y="1155" fill="#9ca3af" font-size="17" text-anchor="middle">Phone's own voice</text>
+    <text x="1875" y="1180" fill="#9ca3af" font-size="17" text-anchor="middle">without a key</text>
   </g>
 </svg>
