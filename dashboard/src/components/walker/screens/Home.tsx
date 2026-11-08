@@ -1,5 +1,5 @@
 // D1 Home · S Accessibility Shortcut sheet
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { icons } from '../icons'
 import { useApp } from '../state'
 import { Button, Gap, Hero, Mascot, Screen, Toggle, cx, type HeroTone, type Mood } from '../ui'
@@ -15,14 +15,15 @@ function greeting() {
  * screen opens, the two choices fill the screen so they're easy to hit, and voice commands work too.
  */
 export function D1Home() {
-  const { go, profile } = useApp()
+  const { go, profile, session } = useApp()
+  const [finding, setFinding] = useState(false)
   const hello = `${greeting()}${profile.name ? `, ${profile.name}` : ''}`
 
   // Always spoken, even with read-aloud off, so the screen can be used without looking.
   useEffect(() => {
     void voice.say(
       `${hello}. Tap the top half of the screen to go somewhere, or the bottom half to read text. ` +
-      'You can also say guide me, read text, or settings.',
+      'You can also say guide me, read text, where am I, or settings.',
       { force: true },
     )
     return () => voice.stop()
@@ -34,7 +35,20 @@ export function D1Home() {
     go(to)
   }
 
-  useVoiceCommands({ 'guide me': () => open('d2'), 'take me': () => open('d2'), 'read text': () => open('d6'), settings: () => open('d7') })
+  async function tellWhere() {
+    if (finding) return
+    buzz(40)
+    setFinding(true)
+    voice.stop()
+    const text = await session.whereAmI()
+    setFinding(false)
+    void voice.say(text, { force: true })
+  }
+
+  useVoiceCommands({
+    'guide me': () => open('d2'), 'take me': () => open('d2'), 'read text': () => open('d6'), settings: () => open('d7'),
+    'where am i': () => void tellWhere(),
+  })
 
   return (
     <Screen className="h-dvh">
@@ -44,9 +58,14 @@ export function D1Home() {
       <Gap h={12} />
       <BigChoice tone="yellow" mood="Listening" title="Read text" sub="Signs, labels and letters" onClick={() => open('d6')} />
       <Gap h={14} />
-      <Button variant="secondary" onClick={() => open('d7')}>
-        <img src={icons.sliders} alt="" className="size-[22px]" />Settings
-      </Button>
+      <div className="flex shrink-0 gap-3">
+        <Button variant="secondary" className="flex-1" onClick={() => void tellWhere()} aria-busy={finding}>
+          {finding ? 'Finding you…' : 'Where am I?'}
+        </Button>
+        <Button variant="secondary" className="flex-1" onClick={() => open('d7')}>
+          <img src={icons.sliders} alt="" className="size-[22px]" />Settings
+        </Button>
+      </div>
     </Screen>
   )
 }

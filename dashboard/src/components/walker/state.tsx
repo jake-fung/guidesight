@@ -1,5 +1,5 @@
 // App-wide state for the walker app: which screen is showing, the user's profile and preferences.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../../lib/api'
 import { useLiveLink, type LiveLink } from '../../lib/live'
 import { useWalkSession, type WalkSession } from './session'
@@ -12,6 +12,8 @@ export type ScreenId =
   | 'b1' | 'b2' | 'c1' | 'c2' | 'c3' | 'c4'
   | 'd1' | 'd2' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
 
+/** Screens that use the camera; it's off everywhere else. */
+const CAMERA_SCREENS: ScreenId[] = ['d4', 'd5', 'd6']
 export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd4', 'd5', 'd6', 'd7', 'd8']
 
 export type Track = 'blind' | 'low-vision' | 'sighted'
@@ -92,6 +94,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const go = useCallback((to: ScreenId) => setHistory((h) => [...h, to]), [])
   const back = useCallback(() => setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h)), [])
+
+  // The camera is only on in Guide mode (and its stop screen) and Read text. Anywhere else it's turned
+  // off, and a walk still going (e.g. one Read text started) ends with it.
+  const usesCamera = CAMERA_SCREENS.includes(screen)
+  const { hasCamera, active, releaseCamera } = session
+  const endWalk = useRef(session.end)
+  useEffect(() => { endWalk.current = session.end })
+  useEffect(() => {
+    if (usesCamera) return
+    if (hasCamera) releaseCamera()
+    if (active) void endWalk.current()
+  }, [usesCamera, hasCamera, active, releaseCamera])
 
   // Keep the URL in step so a refresh (or a link like /walk#d4) opens the same screen.
   useEffect(() => {

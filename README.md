@@ -88,7 +88,8 @@ commands need the server link.
    `ELEVENLABS_STT_MODEL` defaults to `scribe_v2`, `ELEVENLABS_TTS_MODEL` to `eleven_flash_v2_5`, and
    `ELEVENLABS_VOICE_ID` to a premade voice. Without a key, the app speaks with the phone's built-in voice.
 5. **Google Maps** (walking directions in Guide mode): in Google Cloud console, enable **Places API (New)**
-   and **Routes API**, create an API key and set `GOOGLE_MAPS_API_KEY`. The key stays on the server.
+   and **Routes API** (plus **Geocoding API** for "Where am I?" street addresses), create an API key and
+   set `GOOGLE_MAPS_API_KEY`. The key stays on the server.
    Without a key, any destination gets a made-up 200 m route starting where you stand.
 6. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
    `index.html` so `/walk` loads. If the server is on another host, set `VITE_API_URL` and add the web

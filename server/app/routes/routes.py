@@ -43,3 +43,14 @@ def plan_route():
     except maps.MapsError as e:
         abort(502, description=str(e))
     return jsonify(destination=place, **route)
+
+
+@bp.post("/where")
+@require_auth
+def where():
+    """{lat, lng} -> {address: "123 Main Street" | null, place: "Tim Hortons" | null}"""
+    here = _point(request.get_json(force=True, silent=True), "location")
+    try:
+        return jsonify(maps.where_am_i(here))
+    except maps.MapsError as e:
+        abort(502, description=str(e))
