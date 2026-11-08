@@ -21,26 +21,26 @@ export function D1Home() {
   // Always spoken, even with read-aloud off, so the screen can be used without looking.
   useEffect(() => {
     void voice.say(
-      `${hello}. Tap the top half of the screen to start guiding, or the bottom half to read text. ` +
+      `${hello}. Tap the top half of the screen to go somewhere, or the bottom half to read text. ` +
       'You can also say guide me, read text, or settings.',
       { force: true },
     )
     return () => voice.stop()
   }, [hello])
 
-  function open(to: 'd4' | 'd6' | 'd7') {
+  function open(to: 'd2' | 'd6' | 'd7') {
     buzz(40)
     voice.stop()
     go(to)
   }
 
-  useVoiceCommands({ 'guide me': () => open('d4'), 'read text': () => open('d6'), settings: () => open('d7') })
+  useVoiceCommands({ 'guide me': () => open('d2'), 'take me': () => open('d2'), 'read text': () => open('d6'), settings: () => open('d7') })
 
   return (
     <Screen className="h-dvh">
       <h1 className="t-title-l shrink-0">{hello}</h1>
       <Gap h={14} />
-      <BigChoice tone="green" mood="Happy" title="Guide me" sub="Sighty tells you what’s ahead" onClick={() => open('d4')} />
+      <BigChoice tone="green" mood="Happy" title="Guide me" sub="Say where, Sighty takes you there" onClick={() => open('d2')} />
       <Gap h={12} />
       <BigChoice tone="yellow" mood="Listening" title="Read text" sub="Signs, labels and letters" onClick={() => open('d6')} />
       <Gap h={14} />

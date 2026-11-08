@@ -181,10 +181,10 @@ export function VoiceChat() {
   // ---- Sensor and finish ------------------------------------------------------------------------------
   const finish = useCallback((found: boolean) => {
     const name = profile.name ? `, ${profile.name}` : ''
-    const text = `${found ? 'Found it! ' : ''}You’re all set${name}. Say “Hey Sighty” any time.`
+    const text = `${found ? 'Found it! ' : ''}You’re all set${name}.`
     log({ who: 'sighty', text: lineFor('sensor').text }, ...(found ? [{ who: 'done' as const, text: 'Sensor connected' }] : []))
     setTurn('done')
-    setLine({ text, spoken: `${text} Hold your phone at chest height. Starting guide mode.` })
+    setLine({ text, spoken: `${text} Taking you home.` })
   }, [log, profile.name])
 
   useVoiceCommands({ skip: () => finish(false), repeat: () => voice.replay() }, turn === 'sensor')
@@ -197,7 +197,7 @@ export function VoiceChat() {
 
   useEffect(() => {
     if (turn !== 'done') return
-    if (count <= 0) return go('d4')
+    if (count <= 0) return go('d1')
     // Count down slower while Sighty is still talking.
     const t = setTimeout(() => setCount((c) => c - 1), voice.get().status === 'speaking' ? 2000 : 1000)
     return () => clearTimeout(t)
@@ -246,7 +246,7 @@ function hintFor(turn: Turn, phase: 'ask' | 'record' | 'saving', error: string |
     case 'mic': return 'Everything I say is read out loud'
     case 'camera': return 'I only look while you’re walking'
     case 'sensor': return 'Say “skip” to set it up later'
-    case 'done': return 'Hold your phone at chest height'
+    case 'done': return 'Setup complete'
     default: return phase === 'ask' ? 'Tap once, then talk' : 'Not right? Double-tap to say it again'
   }
 }
@@ -353,7 +353,7 @@ function ActionButton({ turn, phase, count }: { turn: Turn; phase: 'ask' | 'reco
   } else if (turn === 'done') {
     tone = 'bg-gs-clear text-white'
     icon = <img src={icons.checkWhite} alt="" className="size-4" />
-    label = `Starting guide mode in ${Math.max(count, 1)}…`
+    label = `Going home in ${Math.max(count, 1)}…`
   } else if (phase === 'record') {
     tone = 'bg-gs-ink text-white'
     icon = <img src={icons.checkWhite} alt="" className="size-4" />

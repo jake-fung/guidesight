@@ -1,13 +1,16 @@
 // D4 Guiding · D5 Obstacle alert · D6 Read text · D7 Settings · D8 Trip summary
 import { useEffect, useRef, useState } from 'react'
 import { DEMO } from '../demo'
+import type { Alert, Avoid, SeenObstacle } from '../../../lib/api'
 import { HarnessPairing } from '../Pairing'
 import { icons } from '../icons'
-import { errorText, grabFrame } from '../session'
+import { shortDistance } from '../navigation'
+import { errorText, grabFrame, type Obstacle } from '../session'
 import { useApp } from '../state'
+import { useTaps } from '../taps'
 import { ActionBar, Button, Chip, Gap, Hero, ListRow, Mascot, NavHeader, Screen, StatTile, Toggle, VoiceBars, cx } from '../ui'
 import { useLiveTranscript } from '../transcribe'
-import { buzz, spellOut, useAutoRead, useVoiceCommands, voice } from '../voice'
+import { announce, buzz, spellOut, useVoiceCommands, voice } from '../voice'
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -51,10 +54,9 @@ function CameraFeed({ className, demoDetection }: { className?: string; demoDete
   )
 }
 
-const GUIDE_INTRO = 'Sighty is now seeing your surroundings. Tap the screen to ask a question, then tap again to send. ' +
-  'Double-tap the screen to end the walk.'
-/** Two taps closer together than this are a double-tap (which ends the walk). */
-const DOUBLE_TAP_MS = 320
+const GUIDE_HELP = 'Tap the screen to ask a question, then tap again to send. Double-tap the screen to end the walk.'
+const GUIDE_INTRO = `Sighty is now seeing your surroundings. ${GUIDE_HELP}`
+const ROUTE_HELP = 'Say repeat, how far, or which way at any time.'
 
 type Ask = { phase: 'idle' } | { phase: 'recording' } | { phase: 'sending'; question: string }
   | { phase: 'answered'; question: string; answer: string }
@@ -62,7 +64,7 @@ type Ask = { phase: 'idle' } | { phase: 'recording' } | { phase: 'sending'; ques
 export function D4Guiding() {
   const { go, session, link } = useApp()
   const seconds = useSeconds(session.startedAt, session.active ? null : session.endedAt)
-  const { start, onAlert, obstacle } = session
+  const { start, onAlert, onNav, navText, obstacle, route, nav } = session
   const live = useLiveTranscript()
   const [askState, setAsk] = useState<Ask>({ phase: 'idle' })
   // A failed mic goes back to idle (the card shows why).
@@ -70,26 +72,56 @@ export function D4Guiding() {
   // Routine scene updates stay quiet during the intro and while a question is being asked or answered.
   const introPlaying = useRef(true)
   const asking = useRef(false)
+  // Last stairs/drop-off warning, so the quick re-checks don't repeat it every half second.
+  const lastDrop = useRef<{ what: string; at: number } | null>(null)
   // True while Sighty says "Listening", before the mic starts (so the word isn't recorded).
   const [preparing, setPreparing] = useState(false)
   /** Bumped on cancel/end, so a mic start still waiting on "Listening" is dropped. */
   const askRun = useRef(0)
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
+  // Back from the obstacle screen, the walk is already going: say what's next instead of the intro.
+  const resumed = useRef(session.active)
 
   useEffect(() => {
     introPlaying.current = true
-    void voice.say(GUIDE_INTRO, { force: true }).then(() => { introPlaying.current = false })
+    const destination = route?.destination.name
+    const text = resumed.current
+      ? (route ? `Carry on. ${navText('next') ?? ''}` : 'Carry on.')
+      : route
+        ? `Guiding you to ${destination}. ${navText('start') ?? ''} ${ROUTE_HELP} ${GUIDE_HELP}`
+        : GUIDE_INTRO
+    void voice.say(text, { force: true }).then(() => { introPlaying.current = false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     start()
+    const guiding = !!route
     // Urgent alerts always speak; routine ones wait while the person is asking something.
+    // While guiding somewhere, "all clear" updates stay quiet so the directions can be heard.
+    // Something in the way (no stop screen unless the harness feels it): say what, how far and how to pass.
     onAlert((a) => {
-      if (!(introPlaying.current || asking.current) || a.urgency === 'high') voice.say(a.speak, { force: true })
+      if (a.drop) {
+        // Stairs or a drop-off, not close enough to stop yet: warn now, then every few seconds.
+        const prev = lastDrop.current
+        if (prev && prev.what === a.drop.what && Date.now() - prev.at < DROP_REPEAT_MS) return
+        lastDrop.current = { what: a.drop.what, at: Date.now() }
+        return void announce(dropWarning(a.drop), 3)
+      }
+      const text = a.obstacle && a.urgency !== 'low' ? cameraWarning(a) : a.speak
+      if (a.urgency === 'high') return void announce(text, 3)
+      if (introPlaying.current || asking.current || (guiding && a.urgency === 'low')) return
+      void announce(text, a.urgency === 'medium' ? 2 : 1)
     })
-    return () => onAlert(null)
-  }, [start, onAlert])
+    // Turns and arriving always speak (over the intro too); the rest wait while a question is asked.
+    onNav((e) => {
+      if (e.priority === 2 || !(introPlaying.current || asking.current)) void announce(e.text, e.priority)
+      if (e.kind === 'turn' || e.kind === 'arrive') buzz(e.kind === 'arrive' ? [80, 60, 80, 60, 80] : [60, 40, 60])
+    })
+    return () => {
+      onAlert(null)
+      onNav(null)
+    }
+  }, [start, onAlert, onNav, route])
 
   // An obstacle from the harness takes over the screen.
   useEffect(() => {
@@ -144,28 +176,26 @@ export function D4Guiding() {
   }
 
   /** The whole screen is the tap target: one tap records, the next sends; a double-tap ends the walk. */
-  function singleTap() {
+  const tap = useTaps(() => {
     if (ask.phase === 'recording') {
       if (!preparing && !live.starting) void send()
     } else if (ask.phase !== 'sending') void startAsking()
-  }
+  }, () => void end())
 
-  function tap() {
-    if (tapTimer.current) {
-      clearTimeout(tapTimer.current)
-      tapTimer.current = null
-      void end()
-      return
-    }
-    // Wait briefly to see whether a second tap follows.
-    tapTimer.current = setTimeout(() => {
-      tapTimer.current = null
-      singleTap()
-    }, DOUBLE_TAP_MS)
+  /** Spoken directions on request ("repeat", "how far", "which way"). */
+  const tell = (what: 'next' | 'far' | 'way') => {
+    const text = navText(what)
+    void announce(text ?? 'There’s no destination on this walk. Double-tap to end it, then pick one from Home.', 2)
   }
 
   useVoiceCommands(
-    { 'hey sighty': () => void startAsking(), 'what is ahead': () => session.describe('manual'), 'end walk': () => end() },
+    {
+      'what is ahead': () => session.describe('manual'),
+      'end walk': () => end(),
+      repeat: () => tell('next'),
+      'how far': () => tell('far'),
+      'which way': () => tell('way'),
+    },
     ask.phase === 'idle' || ask.phase === 'answered',
   )
 
@@ -180,7 +210,9 @@ export function D4Guiding() {
 
   const narration = DEMO
     ? 'Path is clear. Keep going straight — the bench is 3 metres ahead on your right.'
-    : session.lastAlert ?? session.status ?? 'Sighty describes what’s ahead every few seconds, and right away when the harness feels something.'
+    : session.lastAlert ?? session.status ?? (route
+      ? 'Sighty gives directions as you walk and warns you about anything in your way.'
+      : 'Sighty describes what’s ahead every few seconds, and right away when the harness feels something.')
 
   // The harness sensor or the latest camera look can each make the path unsafe.
   const path = DEMO ? 'Clear'
@@ -193,16 +225,26 @@ export function D4Guiding() {
       <div className="flex min-h-0 flex-1 cursor-pointer select-none flex-col" onClick={tap}>
         <div className="flex shrink-0 flex-col gap-0.5">
           <p className="t-overline text-gs-muted">Guiding</p>
-          <h1 className="t-title-l">{DEMO ? 'Walking to the bench' : 'Guide mode'}</h1>
+          <h1 className="t-title-l">{route ? `Walking to ${route.destination.name}` : DEMO ? 'Walking to the bench' : 'Guide mode'}</h1>
         </div>
         <Gap h={14} />
         <CameraFeed demoDetection={DEMO} />
         <Gap h={14} />
+        {route && nav && (
+          <>
+            <section className="flex shrink-0 flex-col gap-0.5 rounded-[22px] bg-gs-ink px-4 py-3 text-white">
+              <p className="t-overline opacity-75">{nav.arrived ? 'You’re here' : `Next · in ${shortDistance(nav.toTurn)}`}</p>
+              <p className="t-title-l">{nav.arrived ? route.destination.name : nav.next}</p>
+            </section>
+            <Gap h={14} />
+          </>
+        )}
         <div className="flex shrink-0 gap-2.5">
           <StatTile tone="blue" label="Path" value={path} />
-          {DEMO ? <StatTile tone="yellow" label="Bench" value="3 m" /> : (
-            <StatTile tone="yellow" label="Harness" value={link.harnessOnline ? 'On' : 'Off'} />
-          )}
+          {route && nav ? <StatTile tone="yellow" label="To go" value={shortDistance(nav.remaining)} />
+            : DEMO ? <StatTile tone="yellow" label="Bench" value="3 m" /> : (
+              <StatTile tone="yellow" label="Harness" value={link.harnessOnline ? 'On' : 'Off'} />
+            )}
           <StatTile tone="green" label="Time" value={DEMO ? '0:42' : clock(seconds)} />
         </div>
         <Gap h={14} />
@@ -250,14 +292,71 @@ export function D4Guiding() {
   )
 }
 
+/** 1.25 → "1.3 metres", 1 → "1 metre", 0.4 → "half a metre" */
+function nearMetres(m: number) {
+  if (m < 0.75) return 'half a metre'
+  const v = Math.round(m * 10) / 10
+  return `${String(v).replace(/\.0$/, '')} metre${v === 1 ? '' : 's'}`
+}
+
+/** Clock position → where it is: 12 = ahead, 11 = slightly left, 9 = on your left. */
+function side(clock?: number) {
+  if (!clock || clock === 12 || clock === 6) return ''
+  const right = clock < 6
+  const slight = clock === 1 || clock === 11
+  return `, ${slight ? 'slightly ' : ''}${slight ? 'to' : 'on'} your ${right ? 'right' : 'left'}`
+}
+
+const AVOID_TIP: Record<Avoid, string> = {
+  right: 'Step to your right to pass.',
+  left: 'Step to your left to pass.',
+  stop: 'Wait until it’s clear.',
+  none: 'Go slowly.',
+}
+
+/** How often a stairs/drop-off warning repeats while it's still ahead. */
+const DROP_REPEAT_MS = 4_000
+
+/** "Stairs going down, 3 metres ahead. Slow down." */
+function dropWarning(d: SeenObstacle) {
+  const what = `${d.what.charAt(0).toUpperCase()}${d.what.slice(1)}`
+  return `${what}, ${d.distance_m !== undefined ? `${nearMetres(d.distance_m)} ahead` : 'ahead'}. Slow down.`
+}
+
+/** What's ahead and how to get past it, from the harness distance and the camera's view. */
+function obstacleText(o: Obstacle | null) {
+  if (o?.danger && o.drop && o.danger === o.drop.what) {
+    return { what: `${o.danger.charAt(0).toUpperCase()}${o.danger.slice(1)} just ahead.`, tip: 'Stop. Find the edge or handrail before you go on.' }
+  }
+  if (o?.danger) {
+    return { what: `${o.danger.charAt(0).toUpperCase()}${o.danger.slice(1)} ahead.`, tip: 'Wait until it’s safe to go.' }
+  }
+  // The harness distance is measured; the camera's is a guess.
+  const m = o?.cm ? o.cm / 100 : o?.seen?.distance_m
+  const seen: SeenObstacle | null | undefined = o?.seen
+  const what = seen?.what
+    ? `${seen.what.charAt(0).toUpperCase()}${seen.what.slice(1)}, ${m !== undefined ? `${nearMetres(m)} ahead` : 'just ahead'}${side(seen.clock)}.`
+    : o?.speak ?? (m !== undefined ? `Something ${nearMetres(m)} ahead.` : 'Something is close ahead.')
+  const tip = o?.avoid ? AVOID_TIP[o.avoid] : o?.speak ? 'Go slowly.' : 'Wait, or step aside to pass.'
+  return { what, tip }
+}
+
+/** "Pole, 2 metres ahead, slightly to your left. Step to your right to pass." */
+function cameraWarning(a: Alert) {
+  const { what, tip } = obstacleText({ speak: a.speak, seen: a.obstacle, avoid: a.avoid, at: 0 })
+  return `${what} ${tip}`
+}
+
 export function D5Obstacle() {
   const { go, back, session, prefs } = useApp()
-  const o = session.obstacle
-  // The server's alert sentence when it has arrived; otherwise the harness distance.
-  const metres = o?.cm ? (o.cm / 100).toFixed(1).replace(/\.0$/, '') : null
-  const what = DEMO ? 'Pole 0.5 m ahead, slightly to your left.' : o?.speak ?? (metres ? `Something ${metres} m ahead.` : 'Something is close ahead.')
-  const tip = DEMO ? 'Step to the right to pass.' : 'Wait until it’s clear.'
-  useAutoRead(`Stop. ${what} ${tip}`)
+  const { what, tip } = DEMO
+    ? { what: 'Pole, half a metre ahead, slightly to your left.', tip: 'Step to your right to pass.' }
+    : obstacleText(session.obstacle)
+  // Always spoken, and again whenever it changes (closer, or the camera says what it is).
+  useEffect(() => {
+    void announce(`Stop. ${what} ${tip}`, 3)
+    return () => voice.stop()
+  }, [what, tip])
 
   useEffect(() => {
     if (!prefs.vibration) return
@@ -276,7 +375,7 @@ export function D5Obstacle() {
   return (
     <Screen bg="bg-gs-yellow">
       <div className="flex shrink-0 items-center justify-between">
-        <p className="t-overline rounded-full bg-gs-ink px-3.5 py-2 text-white">Obstacle</p>
+        <p className="t-overline rounded-full bg-gs-ink px-3.5 py-2 text-white">{session.obstacle?.danger && !DEMO ? 'Danger' : 'Obstacle'}</p>
         {prefs.vibration && <p className="t-label-m flex items-center gap-1.5"><img src={icons.vibrate} alt="" className="size-5" />Vibrating</p>}
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center">
@@ -491,7 +590,9 @@ export function D8Summary() {
   const alerts = DEMO ? 1 : session.alerts
   const walked = DEMO ? 180 : Math.round(session.walked)
   const spotted = DEMO ? ['Crosswalk', 'Bus stop 14', 'Pole', 'Bench'] : session.spotted
-  const title = DEMO ? 'You made it to the bench!' : 'Nice walk!'
+  const arrived = DEMO || (session.nav?.arrived ?? false)
+  const place = DEMO ? 'the bench' : session.route?.destination.name
+  const title = arrived && place ? `You made it to ${place}!` : 'Nice walk!'
 
   // Always spoken (like Guide mode), so the summary works without looking.
   const summary = `${title} You walked for ${spokenTime(seconds)}, covered ${plural(walked, 'metre')}, ` +

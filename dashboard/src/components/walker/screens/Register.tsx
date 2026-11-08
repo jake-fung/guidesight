@@ -185,7 +185,7 @@ export function C3Sensor() {
 export function C4AllSet() {
   const { go, profile } = useApp()
   const title = `You’re all set${profile.name ? `, ${profile.name}` : ''}`
-  useAutoRead(`${title}. Here’s how to use Sighty. One: hold your phone at chest height, camera facing forward. Two: tap Speak, or say “Hey Sighty”, and ask anything. Three: feel a buzz? Stop. Sighty will tell you what’s ahead.`)
+  useAutoRead(`${title}. Here’s how to use Sighty. One: hold your phone at chest height, camera facing forward. Two: tap Speak and ask anything. Three: feel a buzz? Stop. Sighty will tell you what’s ahead.`)
   return (
     <Screen>
       <Hero tone="green" radius={32} className="min-h-[200px]"><Mascot size={160} /></Hero>
@@ -196,7 +196,7 @@ export function C4AllSet() {
       <Gap h={18} />
       <ol className="flex flex-col gap-2.5">
         <StepCard n={1}>Hold your phone at chest height, camera facing forward.</StepCard>
-        <StepCard n={2}>Tap Speak — or say “Hey Sighty” — and ask anything.</StepCard>
+        <StepCard n={2}>Tap Speak and ask anything.</StepCard>
         <StepCard n={3}>Feel a buzz? Stop. Sighty will tell you what’s ahead.</StepCard>
       </ol>
       <Gap h={16} />

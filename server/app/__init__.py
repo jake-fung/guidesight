@@ -23,6 +23,7 @@ def create_app(testing: bool = False) -> Flask:
     from .routes.walks import bp as walks_bp
     from .routes.tts import bp as tts_bp
     from .routes.stt import bp as stt_bp
+    from .routes.routes import bp as routes_bp
 
     app.register_blueprint(me_bp, url_prefix="/api/me")
     app.register_blueprint(setup_bp, url_prefix="/api/setup")
@@ -31,6 +32,7 @@ def create_app(testing: bool = False) -> Flask:
     app.register_blueprint(harness_bp, url_prefix="/api/harness")
     app.register_blueprint(tts_bp, url_prefix="/api/tts")
     app.register_blueprint(stt_bp, url_prefix="/api/stt")
+    app.register_blueprint(routes_bp, url_prefix="/api/routes")
 
     @app.errorhandler(HTTPException)
     def json_error(e):
@@ -44,6 +46,7 @@ def create_app(testing: bool = False) -> Flask:
             firestore=Config.firestore_enabled(),
             gemini=bool(Config.GEMINI_API_KEY),
             elevenlabs=bool(Config.ELEVENLABS_API_KEY),
+            maps=bool(Config.GOOGLE_MAPS_API_KEY),
         )
 
     return app

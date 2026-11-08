@@ -28,7 +28,7 @@ const RATE = 16_000
 let realtimeOff = false
 
 // iPhones only run audio processing once it's resumed inside a tap. Screens like "Ask" can open
-// without one (e.g. from "Hey Sighty"), so resume it on every tap anywhere.
+// without one (e.g. from a voice command), so resume it on every tap anywhere.
 if (typeof document !== 'undefined') {
   document.addEventListener('pointerdown', () => {
     const ctx = audioContext()

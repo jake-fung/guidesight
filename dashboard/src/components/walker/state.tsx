@@ -10,9 +10,9 @@ export type ScreenId =
   | 'a0' | 'a1' | 'a2' | 'a3'
   | 'v1'
   | 'b1' | 'b2' | 'c1' | 'c2' | 'c3' | 'c4'
-  | 'd1' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
+  | 'd1' | 'd2' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
 
-export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'c1', 'c2', 'c3', 'c4', 'd1', 'd4', 'd5', 'd6', 'd7', 'd8']
+export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd4', 'd5', 'd6', 'd7', 'd8']
 
 export type Track = 'blind' | 'low-vision' | 'sighted'
 

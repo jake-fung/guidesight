@@ -25,12 +25,38 @@ export type SensorSearch = {
 
 // ---- Walker app ---------------------------------------------------------------
 export type HapticPattern = 'short' | 'double' | 'long'
+/** Nearest thing in the walker's path, from the camera. clock: 12 = straight ahead, 3 = right, 9 = left. */
+export type SeenObstacle = { what: string; distance_m?: number; clock?: number }
+/** Which way to step around it. */
+export type Avoid = 'left' | 'right' | 'stop' | 'none'
 export type Alert = {
   speak: string
   urgency: 'low' | 'medium' | 'high'
   haptic: HapticPattern | null
   speech_rate: number
+  obstacle?: SeenObstacle | null
+  avoid?: Avoid | null
+  /** Stairs or a drop-off seen at any distance (always high urgency). */
+  drop?: SeenObstacle | null
+  /** Stop now: "red light", "moving traffic" at any distance; stairs or a drop-off within 1 metre. */
+  danger?: string | null
 }
+
+// ---- Walking directions (server/app/routes/routes.py, Google Maps) -------------
+export type Place = { name: string; address: string; location: LatLng }
+export type RouteStep = {
+  /** Google's instruction, e.g. "Turn left onto King St W". */
+  instruction: string
+  /** e.g. DEPART, TURN_LEFT, TURN_SLIGHT_RIGHT, STRAIGHT. */
+  maneuver: string
+  distance_m: number
+  duration_s: number
+  start: LatLng
+  end: LatLng
+  /** The step's path as [lat, lng] pairs. */
+  points: [number, number][]
+}
+export type Route = { destination: Place; distance_m: number; duration_s: number; steps: RouteStep[] }
 export type Settings = {
   voice: string
   speech_rate: number
@@ -93,6 +119,10 @@ export const api = {
 
   harnessStatus: () => request<{ harness_id: string | null; online: boolean }>('/harness/status'),
   buzz: (pattern: HapticPattern) => post<{ delivered: boolean }>('/harness/buzz', { pattern }),
+
+  /** Walking route from `origin`. Text is searched near the origin; a Place re-routes to it. 404 = not found. */
+  route: (destination: string | (LatLng & { name?: string; address?: string }), origin: LatLng) =>
+    post<Route>('/routes', { destination, origin }),
 
   startWalk: () => post<{ id: string }>('/walks'),
   endWalk: (walkId: string) => post(`/walks/${walkId}/end`),
