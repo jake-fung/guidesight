@@ -1,4 +1,18 @@
-# GuideSight
+<div align="center">
+  <h1 style="font-size:48px; margin-bottom:0;">GuideSight</h1>
+  <h3>Obstacle alerts and spoken guidance for walkers with guide dogs</h3>
+  <br>
+  <img src="https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54"/>
+  <img src="https://img.shields.io/badge/flask-%23000.svg?style=for-the-badge&logo=flask&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Firebase-039BE5?style=for-the-badge&logo=Firebase&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white"/>
+  <img src="https://img.shields.io/badge/C++-00599C?style=for-the-badge&logo=C%2B%2B&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Arduino-00979D?style=for-the-badge&logo=Arduino&logoColor=white"/>
+  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
+  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white"/>
+  <img src="https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white"/>
+  <br><br>
+</div>
 
 Assistive walking companion for blind and low-vision people who use guide dogs. An ultrasonic
 sensor on the harness spots obstacles ahead and tells the server over Wi-Fi. The walker's phone snaps
@@ -6,6 +20,28 @@ a frame, Gemini describes what's ahead, and the walker hears a short warning in 
 feels a buzz on the harness handle.
 
 Built for HackCamp 2026.
+
+## Features
+
+- **Obstacle sensing** — ultrasonic sensor on the harness buzzes the handle as things get closer, even offline.
+- **Scene description** — Gemini Vision looks at the phone's camera and describes what's ahead.
+- **Guide mode** — spoken turn-by-turn walking directions via Google Maps.
+- **Ask mode** — voice or typed questions, answered aloud (ElevenLabs, or the phone's built-in voice).
+- **Read mode** — reads text from signs, menus, and buses aloud.
+- **No login** — each phone gets a random device id on first open; no account to set up.
+
+## Built with
+
+- Flask + flask-sock server, Firestore (`firebase-admin`) for storage — optional, falls back to in-memory.
+- `google-genai` (Gemini Vision) for scene description.
+- ElevenLabs for speech-to-text (questions) and text-to-speech (spoken alerts).
+- Google Maps — Places API (New) + Routes API — for walking directions.
+- React + Vite + Tailwind v4 walker web app.
+- Arduino UNO R4 WiFi (or ESP32) + HC-SR04 ultrasonic sensor + buzzer firmware.
+
+## Architecture Overview
+
+![Architecture overview](docs/architecture-overview.svg)
 
 ```
  UNO R4 WiFi harness ──Wi-Fi──▶ Flask server ──▶ Gemini Vision / ElevenLabs / Firestore
@@ -20,7 +56,15 @@ Built for HackCamp 2026.
 | `dashboard/`        | Walker web app: voice or typed first-run setup → walker app (Home, Where to?, Guide mode with spoken turn-by-turn directions, Read text, Settings). No login | React, Vite, Tailwind v4 |
 | `firmware/uno_r4/`  | Obstacle detection, proximity beeps, buzz patterns, Wi-Fi link   | Arduino UNO R4 WiFi, ArduinoHttpClient |
 
-## Quick start (mock mode, no API keys)
+## Getting Started
+
+### Prerequisites
+
+- [Python](https://www.python.org/) 3.10+ and pip.
+- [Node.js](https://nodejs.org/) and npm.
+- (optional, for the harness) Arduino IDE.
+
+### Quick start (mock mode, no API keys)
 
 Every external service falls back to canned responses when its key is blank, and data is kept in memory.
 
@@ -81,6 +125,8 @@ commands need the server link.
 `firmware/esp32/` is the same firmware for an ESP32 dev board (board **ESP32 Dev Module**, core
 **esp32 by Espressif**, plus **ArduinoHttpClient**). Setup steps are the same, using
 `firmware/esp32/arduino_secrets.example.h`. The blue LED on the board is on while it's connected.
+
+![Wearable wiring](docs/wearable-wiring.svg)
 
 | From | To ESP32 (pins printed as D5, D18...) |
 |---|---|
@@ -185,6 +231,6 @@ users/{uid}/walks/{walkId}/events/{eventId}  { type: obstacle|stop|pull|alert|qu
 
 ## Main TODOs
 
-- Calibrate `OBSTACLE_CM` / `CLEAR_CM` in `firmware/uno_r4/uno_r4.ino` on a real harness.
-- Hands-free voice (wake word / voice activity detection) instead of tap-to-ask.
-- Background operation: keep the walk running with the screen locked.
+- [ ] Calibrate `OBSTACLE_CM` / `CLEAR_CM` in `firmware/uno_r4/uno_r4.ino` on a real harness.
+- [ ] Hands-free voice (wake word / voice activity detection) instead of tap-to-ask.
+- [ ] Background operation: keep the walk running with the screen locked.
