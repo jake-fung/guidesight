@@ -160,8 +160,11 @@ export function useWalkSession(link: LiveLink) {
     return { seconds: startedAt ? Math.round((Date.now() - startedAt) / 1000) : 0, alerts, metres: Math.round(walked), spotted }
   }, [startedAt, alerts, walked, spotted])
 
-  /** Spoken (audio) or typed question with the current frame. Starts a walk first if needed. */
-  const ask = useCallback(async (audio: Blob | string) => {
+  /**
+   * Spoken (audio) or typed question with a camera frame. Starts a walk first if needed.
+   * Pass `frame` to send a frame already grabbed (the camera may be gone after awaiting the walk).
+   */
+  const ask = useCallback(async (audio: Blob | string, frame?: HTMLCanvasElement | null) => {
     if (DEMO) {
       const res = await demoAnswer(typeof audio === 'string' ? audio : '')
       note(res.alert.speak)
@@ -169,7 +172,7 @@ export function useWalkSession(link: LiveLink) {
     }
     const id = walkId.current ?? (await start())
     if (!id) throw new Error('Not connected to the server')
-    const canvas = grabFrame(video.current)
+    const canvas = frame ?? grabFrame(video.current)
     const image = canvas ? await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY)) : null
     const res = await api.askQuestion(id, audio, image, location.current)
     if (image) setUrgency(res.alert.urgency)

@@ -309,9 +309,17 @@ export function D6ReadText() {
     setBusy(true)
     setText(null)
     const canvas = grabFrame(video.current)
+    if (!canvas && !DEMO) {
+      const msg = 'The camera isn’t ready yet. Make sure camera access is allowed, then tap Read.'
+      setText(msg)
+      voice.say(msg, { force: true })
+      setBusy(false)
+      return
+    }
     setShot(canvas?.toDataURL('image/jpeg', 0.7) ?? null)
     try {
-      const res = await session.ask('Read any text you can see, word for word. Then add one short helpful note.')
+      // Send this exact frame: the one shown on screen is the one read.
+      const res = await session.ask('Read any text you can see, word for word. Then add one short helpful note.', canvas)
       setText(res.alert.speak)
       voice.say(`It says: ${res.alert.speak}`, { force: true })
     } catch (e) {
@@ -331,10 +339,11 @@ export function D6ReadText() {
       <NavHeader title="Read text" onBack={back} />
       <Gap h={20} />
       <div className="relative flex min-h-[200px] flex-1 items-center justify-center overflow-hidden rounded-[24px] border-2 border-gs-line bg-gs-tint">
-        {shot ? <img src={shot} alt="" className="absolute inset-0 size-full object-cover" />
-          : session.hasCamera ? (
-            <video ref={(el) => { video.current = el; session.attachVideo(el) }} playsInline muted autoPlay aria-hidden className="absolute inset-0 size-full object-cover" />
-          ) : null}
+        {/* The video stays mounted under the photo, so the camera stays attached for the next read. */}
+        {session.hasCamera && (
+          <video ref={(el) => { video.current = el; session.attachVideo(el) }} playsInline muted autoPlay aria-hidden className="absolute inset-0 size-full object-cover" />
+        )}
+        {shot && <img src={shot} alt="" className="absolute inset-0 size-full object-cover" />}
         {DEMO && (
           <div className="relative flex flex-col items-center gap-0.5 rounded-[10px] bg-gs-ink px-[22px] py-3 text-white">
             <span className="t-label-l">BUS STOP 14</span>
