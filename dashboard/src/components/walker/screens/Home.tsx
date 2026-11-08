@@ -1,286 +1,66 @@
-// D1 Home · D2 Speak (listening) · D3 Speak (answer) · S Accessibility Shortcut sheet
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+// D1 Home · S Accessibility Shortcut sheet
+import { useEffect, useRef } from 'react'
 import { icons } from '../icons'
-import { useApp, type Exchange } from '../state'
-import { errorText } from '../session'
-import { Button, Chip, Gap, Mascot, NavHeader, Screen, Toggle, VoiceBars, cx } from '../ui'
-import { useLiveTranscript } from '../transcribe'
-import { useAutoRead, voice } from '../voice'
+import { useApp } from '../state'
+import { Button, Gap, Hero, Mascot, Screen, Toggle, cx, type HeroTone, type Mood } from '../ui'
+import { buzz, useVoiceCommands, voice } from '../voice'
 
 function greeting() {
   const h = new Date().getHours()
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
+/**
+ * Home, built for people who can't see the screen (like Guide mode): Sighty speaks the choices as the
+ * screen opens, the two choices fill the screen so they're easy to hit, and voice commands work too.
+ */
 export function D1Home() {
-  const { go, profile, setExchange, session } = useApp()
+  const { go, profile } = useApp()
   const hello = `${greeting()}${profile.name ? `, ${profile.name}` : ''}`
-  useAutoRead(`${hello}. Ask Sighty anything, or pick Guide me, Read text, Describe, or Find things.`)
 
-  function describe() {
-    setExchange({ question: 'What’s around me?', answer: null })
-    go('d3')
-    session.ask('Describe what’s around me.')
-      .then((r) => setExchange({ question: 'What’s around me?', answer: r.alert.speak }))
-      .catch((e) => setExchange({ question: 'What’s around me?', answer: null, error: errorText(e) }))
-  }
-
-  const categories = [
-    { label: 'Guide me', icon: icons.catGuide, onClick: () => go('d4') },
-    { label: 'Read text', icon: icons.catRead, onClick: () => go('d6') },
-    { label: 'Describe', icon: icons.catDescribe, onClick: describe },
-    { label: 'Find things', icon: icons.catFind, onClick: () => go('d2') },
-  ]
-
-  return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-gs-surface">
-      <main className="flex flex-1 flex-col px-6 pb-4" style={{ paddingTop: 'max(6px, env(safe-area-inset-top))' }}>
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="t-display-l">{greeting()},{profile.name && <><br />{profile.name}</>}</h1>
-          <button type="button" onClick={() => go('d7')} aria-label="Settings"
-            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gs-tint active:bg-gs-line">
-            <img src={icons.sliders} alt="" className="size-[22px]" />
-          </button>
-        </div>
-        <Gap h={16} />
-        <div className="flex items-center gap-3 rounded-full bg-gs-tint py-2 pl-[18px] pr-2">
-          <img src={icons.search} alt="" className="size-[22px]" />
-          <button type="button" onClick={() => { setExchange(null); go('d3') }} className="t-body-l flex-1 text-left text-gs-muted">
-            Ask Sighty anything
-          </button>
-          <button type="button" onClick={() => go('d2')} aria-label="Speak to Sighty"
-            className="flex size-11 items-center justify-center rounded-full bg-gs-action active:bg-gs-action-pressed">
-            <img src={icons.mic22White} alt="" className="size-[22px]" />
-          </button>
-        </div>
-        <Gap h={14} />
-        <div className="grid grid-cols-2 gap-2.5">
-          {categories.map((c) => (
-            <button key={c.label} type="button" onClick={c.onClick}
-              className="t-label-l flex min-w-0 items-center gap-3 whitespace-nowrap rounded-[20px] bg-gs-tint px-4 py-[18px] text-left active:bg-gs-line">
-              <img src={c.icon} alt="" className="size-7 shrink-0" />{c.label}
-            </button>
-          ))}
-        </div>
-        <Gap h={20} />
-        <h2 className="t-title-l">For you</h2>
-        <Gap h={10} />
-        <Banner tone="bg-gs-green" circle="bg-gs-green-2" title="Walk to the bus stop" sub="Saved route · 6 min" mood="Happy" onClick={() => go('d4')} />
-        <Gap h={10} />
-        <Banner tone="bg-gs-yellow" circle="bg-gs-yellow-2" title="Practice a crossing" sub="With Sighty · 5 min" mood="Listening" onClick={() => go('d4')} />
-      </main>
-      <nav aria-label="Main" className="sticky bottom-0 flex border-t-[1.5px] border-gs-line bg-gs-surface pt-2.5"
-        style={{ paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
-        <Tab icon={icons.tabToday} label="Today" current />
-        <Tab icon={icons.tabGuide} label="Guide" onClick={() => go('d4')} />
-        <Tab icon={icons.tabAsk} label="Ask" onClick={() => go('d2')} />
-        <Tab icon={icons.tabYou} label="You" onClick={() => go('d7')} />
-      </nav>
-    </div>
-  )
-}
-
-function Banner({ tone, circle, title, sub, mood, onClick }: { tone: string; circle: string; title: string; sub: string; mood: 'Happy' | 'Listening'; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className={cx('relative min-h-[124px] w-full shrink-0 overflow-hidden rounded-[24px] text-left', tone)}>
-      <span aria-hidden className={cx('absolute -top-5 left-[200px] size-[180px] rounded-full', circle)} />
-      <span className="relative flex w-[220px] flex-col gap-1 py-[30px] pl-5">
-        <span className="t-title-m">{title}</span>
-        <span className="t-caption">{sub}</span>
-      </span>
-      <Mascot mood={mood} size={100} className="!absolute left-[236px] top-10" />
-    </button>
-  )
-}
-
-function Tab({ icon, label, current, onClick }: { icon: string; label: string; current?: boolean; onClick?: () => void }) {
-  return (
-    <button type="button" onClick={onClick} aria-current={current ? 'page' : undefined}
-      className={cx('t-caption flex flex-1 flex-col items-center gap-[3px]', current ? 'text-gs-ink' : 'text-gs-muted')}>
-      <img src={icon} alt="" className="size-6" />{label}
-    </button>
-  )
-}
-
-/** Sends a question and fills in the answer on D3. */
-function useAsk() {
-  const { session, setExchange } = useApp()
-  return (question: string, payload: Blob | string) => {
-    setExchange({ question, answer: null })
-    session.ask(payload)
-      .then((r) => setExchange({ question: r.transcript || question, answer: r.alert.speak }))
-      .catch((e) => setExchange({ question, answer: null, error: errorText(e) }))
-  }
-}
-
-/** A pause this long after some words sends the question ("or just pause"). */
-const PAUSE_SENDS_MS = 1600
-
-export function D2Listening() {
-  const { back, go } = useApp()
-  const ask = useAsk()
-  const live = useLiveTranscript()
-  const [note, setNote] = useState<string | null>(null)
-  const sending = useRef(false)
-
-  // Listen as soon as the screen opens (Sighty stops talking first, so it isn't recorded).
-  const { start } = live
+  // Always spoken, even with read-aloud off, so the screen can be used without looking.
   useEffect(() => {
+    void voice.say(
+      `${hello}. Tap the top half of the screen to start guiding, or the bottom half to read text. ` +
+      'You can also say guide me, read text, or settings.',
+      { force: true },
+    )
+    return () => voice.stop()
+  }, [hello])
+
+  function open(to: 'd4' | 'd6' | 'd7') {
+    buzz(40)
     voice.stop()
-    start()
-  }, [start])
-
-  async function finish() {
-    if (sending.current) return
-    sending.current = true
-    const question = (await live.finish()).trim()
-    if (!question) {
-      sending.current = false
-      setNote('I didn’t catch that. Try again.')
-      live.start()
-      return
-    }
-    // The words are already transcribed, so the question goes up as text.
-    ask(question, question)
-    go('d3')
+    go(to)
   }
-  const finishRef = useRef(finish)
-  useEffect(() => {
-    finishRef.current = finish
-  })
 
-  // Live words stop changing once the person stops talking: send after a short pause.
-  useEffect(() => {
-    if (!live.live || !live.recording || !live.text.trim()) return
-    const t = setTimeout(() => void finishRef.current(), PAUSE_SENDS_MS)
-    return () => clearTimeout(t)
-  }, [live.live, live.recording, live.text])
+  useVoiceCommands({ 'guide me': () => open('d4'), 'read text': () => open('d6'), settings: () => open('d7') })
 
-  const caption = live.error ?? note ?? (
-    live.starting ? 'Starting the microphone…'
-      : live.live === false ? 'Live words aren’t available here. Tap the button when you’re done.'
-      : 'Words appear as you speak')
   return (
-    <Screen>
-      <NavHeader title="Listening" onBack={back} centered icon="close" />
+    <Screen className="h-dvh">
+      <h1 className="t-title-l shrink-0">{hello}</h1>
       <Gap h={14} />
-      <div className="flex min-h-[260px] flex-1 flex-col items-center justify-center gap-[18px] rounded-[28px] bg-gs-tint">
-        <Mascot mood="Listening" size={180} />
-        <VoiceBars heights={[10, 22, 36, 28, 44, 30, 18, 40, 26, 14, 8]} active={live.recording && !live.starting} />
-      </div>
+      <BigChoice tone="green" mood="Happy" title="Guide me" sub="Sighty tells you what’s ahead" onClick={() => open('d4')} />
+      <Gap h={12} />
+      <BigChoice tone="yellow" mood="Listening" title="Read text" sub="Signs, labels and letters" onClick={() => open('d6')} />
       <Gap h={14} />
-      <div className="flex shrink-0 flex-col gap-2 rounded-[24px] border border-gs-line bg-gs-tint px-5 py-[18px]" aria-live="polite">
-        <p className="t-overline text-gs-muted">You’re saying</p>
-        <p className={cx('t-title-l break-words', !live.text && 'text-gs-muted')}>{live.text || '…'}</p>
-        <p className="t-caption text-gs-muted" role={live.error ? 'alert' : undefined}>{caption}</p>
-      </div>
-      <Gap h={20} />
-      {live.error ? (
-        <Button onClick={() => { setNote(null); live.start() }}>Try again</Button>
-      ) : (
-        <button type="button" onClick={() => void finish()} aria-label="Done speaking"
-          className="mx-auto flex size-[88px] shrink-0 items-center justify-center rounded-full bg-gs-action active:bg-gs-action-pressed">
-          <span className="size-[26px] rounded-[7px] bg-white" />
-        </button>
-      )}
-      <Gap h={10} />
-      <p className="t-body-m text-center text-gs-muted">{live.live === false ? 'Tap when you’re done' : 'Tap when you’re done — or just pause'}</p>
+      <Button variant="secondary" onClick={() => open('d7')}>
+        <img src={icons.sliders} alt="" className="size-[22px]" />Settings
+      </Button>
     </Screen>
   )
 }
 
-/** Turns an answer into follow-up suggestions, e.g. "Guide me to the bench". */
-function suggestions(ex: Exchange | null) {
-  const things = ['bench', 'bus stop', 'crosswalk', 'door', 'stairs', 'exit', 'elevator', 'seat']
-  const thing = ex?.answer ? things.find((t) => ex.answer!.toLowerCase().includes(t)) : undefined
-  return [thing ? `Guide me to the ${thing}` : 'Guide me', 'What else is around?']
-}
-
-export function D3Answer() {
-  const { back, go, exchange } = useApp()
-  const ask = useAsk()
-  const [typing, setTyping] = useState(false)
-  const [text, setText] = useState('')
-  const answer = exchange?.answer
-
-  useEffect(() => {
-    if (answer) voice.say(answer, { force: true })
-    else if (exchange?.error) voice.say('Sorry, I couldn’t answer that. ' + exchange.error)
-  }, [answer, exchange?.error])
-
-  function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!text.trim()) return
-    ask(text.trim(), text.trim())
-    setText('')
-    setTyping(false)
-  }
-
+/** One of the two big Home choices: fills half the screen so it's easy to find by touch. */
+function BigChoice({ tone, mood, title, sub, onClick }: { tone: HeroTone; mood: Mood; title: string; sub: string; onClick: () => void }) {
   return (
-    <Screen>
-      <NavHeader title="Ask Sighty" onBack={back} />
-      <Gap h={12} />
-      <div className="flex flex-1 flex-col gap-3" aria-live="polite">
-        {exchange ? (
-          <>
-            <div className="ml-auto flex max-w-[242px] flex-col gap-1 rounded-[22px] rounded-br-[6px] bg-gs-line px-[18px] py-3.5">
-              <p className="t-caption text-gs-muted">You said</p>
-              <p className="t-body-l">{exchange.question}</p>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <Mascot size={48} animate={false} />
-              <div className="flex min-w-0 flex-1 flex-col gap-3.5 rounded-[22px] rounded-tl-[6px] border-2 border-gs-line bg-gs-surface p-4">
-                <p className="t-title-m">
-                  {answer ?? (exchange.error ? 'Sorry, I couldn’t reach GuideSight. Check your connection and try again.' : 'Looking…')}
-                </p>
-                {answer && (
-                  <div className="flex gap-2">
-                    <Chip onClick={() => voice.stop()}>Stop</Chip>
-                    <Chip onClick={() => voice.replay()}>Replay</Chip>
-                  </div>
-                )}
-              </div>
-            </div>
-            {answer && (
-              <div className="flex flex-col items-start gap-2">
-                {suggestions(exchange).map((s) => (
-                  <Chip key={s} onClick={() => (s.startsWith('Guide me') ? go('d4') : ask(s, s))}>{s}</Chip>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-            <Mascot size={120} />
-            <p className="t-title-m">What would you like to know?</p>
-          </div>
-        )}
-      </div>
-      <Gap h={12} />
-      {/* Composer */}
-      <form onSubmit={submit} className="flex shrink-0 flex-col gap-3.5 rounded-[24px] border border-gs-line bg-gs-tint pb-3 pl-5 pr-3 pt-[18px]">
-        {typing ? (
-          <>
-            <label htmlFor="ask-input" className="sr-only">Type your question</label>
-            <input id="ask-input" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask Sighty anything…"
-              className="t-body-l bg-transparent outline-none placeholder:text-gs-muted" enterKeyHint="send" />
-          </>
-        ) : <p className="t-body-l text-gs-muted">Ask Sighty anything…</p>}
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={() => setTyping((t) => !t)} aria-label={typing ? 'Close keyboard' : 'Type instead'} aria-pressed={typing}
-            className="flex size-[52px] items-center justify-center rounded-full border-[1.5px] border-gs-line bg-gs-surface">
-            <img src={icons.keyboard} alt="" className="size-[22px]" />
-          </button>
-          {typing && text.trim() ? (
-            <button type="submit" className="t-label-l flex h-[52px] items-center rounded-full bg-gs-action px-6 text-white">Send</button>
-          ) : (
-            <button type="button" onClick={() => go('d2')} className="t-label-l flex h-[52px] items-center gap-2 rounded-full bg-gs-action pl-6 pr-[26px] text-white active:bg-gs-action-pressed">
-              <img src={icons.mic22White} alt="" className="size-[22px]" />Speak
-            </button>
-          )}
-        </div>
-      </form>
-    </Screen>
+    <button type="button" onClick={onClick} className="flex min-h-0 flex-1 select-none flex-col active:opacity-85">
+      <Hero tone={tone} radius={32} className="w-full">
+        <Mascot mood={mood} size={120} />
+        <span className="t-display-l mt-3">{title}</span>
+        <span className="t-body-l mt-1">{sub}</span>
+      </Hero>
+    </button>
   )
 }
 

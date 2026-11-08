@@ -1,20 +1,19 @@
-// Track 2 — Low vision & sighted: B1–B3 register, C1–C4 setup. The ♿ button opens the accessibility sheet.
+// Track 2 — Low vision & sighted: B1–B2 register, C1–C4 setup. The ♿ button opens the accessibility sheet.
 import { useEffect, useState } from 'react'
 import { icons } from '../icons'
 import { useApp } from '../state'
 import { Button, Gap, Hero, IconBadge, Mascot, Radar, Screen, StatusPill, StepCard, StepHeader, TextField } from '../ui'
 import { buzz, firstWord, spellOut, spokenToEmail, useAutoRead, usePhrases, voice } from '../voice'
-import { CodeEntry } from './Start'
 import { HarnessPairing } from '../Pairing'
 
-function useStepHeader(step: number) {
+function useStepHeader(step: number, of = 3) {
   const { back, setSheetOpen } = useApp()
-  return <StepHeader step={step} onBack={back} onA11y={() => setSheetOpen(true)} />
+  return <StepHeader step={step} of={of} onBack={back} onA11y={() => setSheetOpen(true)} />
 }
 
 export function B1Name() {
   const { go, profile, setProfile } = useApp()
-  const header = useStepHeader(1)
+  const header = useStepHeader(1, 2)
   const [name, setName] = useState(profile.name)
   const [dictating, setDictating] = useState(false)
   const [heard, setHeard] = useState<string | null>(null)
@@ -66,7 +65,7 @@ export function B1Name() {
 
 export function B2Email() {
   const { go, profile, setProfile } = useApp()
-  const header = useStepHeader(2)
+  const header = useStepHeader(2, 2)
   const [email, setEmail] = useState(profile.email)
   const [dictating, setDictating] = useState(false)
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -75,8 +74,9 @@ export function B2Email() {
 
   function next() {
     if (!valid) return
-    setProfile({ email })
-    go('b3')
+    // No email code step: registering signs you in straight away.
+    setProfile({ email, signedIn: true })
+    go('c1')
   }
 
   return (
@@ -96,12 +96,6 @@ export function B2Email() {
       <Button onClick={next} disabled={!valid}>Continue</Button>
     </Screen>
   )
-}
-
-export function B3Code() {
-  const { go, setProfile } = useApp()
-  const header = useStepHeader(3)
-  return <CodeEntry header={header} cta="Continue" onDone={() => { setProfile({ signedIn: true }); go('c1') }} />
 }
 
 /** C1 / C2: hero + title + description + Allow / Not now. */

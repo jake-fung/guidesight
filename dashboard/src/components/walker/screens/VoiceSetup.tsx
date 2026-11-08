@@ -207,7 +207,8 @@ export function VoiceChat() {
   const answering = turn === 'how' || turn === 'name' || turn === 'email'
   const recording = answering && phase !== 'ask'
   return (
-    <Screen>
+    // Fixed to the viewport height so the chat history scrolls instead of pushing the page past the screen.
+    <Screen className="h-dvh">
       <ChatHeader step={turn === 'done' ? 'done' : STEP[turn]} onType={() => { voice.stop(); go('b1') }} />
       {/* The whole area below the header is one tap target; the big button is its visible, focusable part. */}
       <div className="flex min-h-0 flex-1 cursor-pointer select-none flex-col" onClick={tap}>
@@ -274,12 +275,19 @@ function ChatHeader({ step, onType }: { step: number | 'done'; onType: () => voi
   )
 }
 
-/** Earlier messages, newest at the bottom. Older ones slide off the top. */
+/** Earlier messages, newest at the bottom. Scrolls when they don't fit, and follows new messages. */
 function History({ entries }: { entries: Entry[] }) {
+  const list = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    const el = list.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [entries.length])
   return (
-    <ol aria-label="Conversation so far" className="flex min-h-0 flex-1 flex-col justify-end gap-2 overflow-hidden">
-      {entries.slice(-6).map((e) => (
-        <li key={e.id} className={cx('flex shrink-0', e.who === 'you' ? 'justify-end' : e.who === 'done' ? 'justify-center' : 'justify-start')}>
+    // No justify-end: it would make overflowing messages unreachable. The first item's mt-auto
+    // keeps short histories at the bottom instead.
+    <ol ref={list} aria-label="Conversation so far" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
+      {entries.map((e, i) => (
+        <li key={e.id} className={cx('flex shrink-0', i === 0 && 'mt-auto', e.who === 'you' ? 'justify-end' : e.who === 'done' ? 'justify-center' : 'justify-start')}>
           {e.who === 'sighty' && (
             <div className="max-w-[80%] rounded-[16px] rounded-tl-[6px] bg-gs-tint px-3.5 py-2.5">
               <p className="t-caption text-gs-muted">Sighty</p>

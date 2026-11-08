@@ -9,10 +9,10 @@ import { voice } from './voice'
 export type ScreenId =
   | 'a0' | 'a1' | 'a2' | 'a3'
   | 'v1'
-  | 'b1' | 'b2' | 'b3' | 'c1' | 'c2' | 'c3' | 'c4'
-  | 'd1' | 'd2' | 'd3' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
+  | 'b1' | 'b2' | 'c1' | 'c2' | 'c3' | 'c4'
+  | 'd1' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
 
-export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'b3', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8']
+export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'c1', 'c2', 'c3', 'c4', 'd1', 'd4', 'd5', 'd6', 'd7', 'd8']
 
 export type Track = 'blind' | 'low-vision' | 'sighted'
 
@@ -53,9 +53,6 @@ function save(key: string, value: unknown) {
   }
 }
 
-/** A question asked on D2, answered on D3. */
-export type Exchange = { question: string; answer: string | null; error?: string }
-
 type Ctx = {
   screen: ScreenId
   go: (to: ScreenId) => void
@@ -68,8 +65,6 @@ type Ctx = {
   setProfile: (p: Partial<Profile>) => void
   link: LiveLink
   session: WalkSession
-  exchange: Exchange | null
-  setExchange: (e: Exchange | null) => void
 }
 
 const AppContext = createContext<Ctx | null>(null)
@@ -91,7 +86,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Returning, signed-in users land on Home; everyone else starts at "Tap anywhere".
   const [history, setHistory] = useState<ScreenId[]>(() => [fromHash() ?? (profile.signedIn ? 'd1' : 'a0')])
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [exchange, setExchange] = useState<Exchange | null>(null)
   const link = useLiveLink()
   const session = useWalkSession(link)
   const screen = history[history.length - 1]
@@ -139,8 +133,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [prefs.speechRate, prefs.voice, prefs.readAloud])
 
   const value = useMemo<Ctx>(() => ({
-    screen, go, back, sheetOpen, setSheetOpen, prefs, setPrefs, profile, setProfile, link, session, exchange, setExchange,
-  }), [screen, go, back, sheetOpen, prefs, setPrefs, profile, setProfile, link, session, exchange])
+    screen, go, back, sheetOpen, setSheetOpen, prefs, setPrefs, profile, setProfile, link, session,
+  }), [screen, go, back, sheetOpen, prefs, setPrefs, profile, setProfile, link, session])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

@@ -10,6 +10,14 @@ import { useLiveTranscript } from '../transcribe'
 import { buzz, spellOut, useAutoRead, useVoiceCommands, voice } from '../voice'
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+/** 252 → "4 minutes and 12 seconds" */
+function spokenTime(s: number) {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  if (!m) return plural(sec, 'second')
+  return sec ? `${plural(m, 'minute')} and ${plural(sec, 'second')}` : plural(m, 'minute')
+}
 
 function useSeconds(from: number | null, until: number | null = null) {
   const [now, setNow] = useState(() => Date.now())
@@ -43,7 +51,10 @@ function CameraFeed({ className, demoDetection }: { className?: string; demoDete
   )
 }
 
-const GUIDE_INTRO = 'Sighty is now seeing your surroundings. Tap the screen to ask a question, then tap again to send.'
+const GUIDE_INTRO = 'Sighty is now seeing your surroundings. Tap the screen to ask a question, then tap again to send. ' +
+  'Double-tap the screen to end the walk.'
+/** Two taps closer together than this are a double-tap (which ends the walk). */
+const DOUBLE_TAP_MS = 320
 
 type Ask = { phase: 'idle' } | { phase: 'recording' } | { phase: 'sending'; question: string }
   | { phase: 'answered'; question: string; answer: string }
@@ -59,6 +70,12 @@ export function D4Guiding() {
   // Routine scene updates stay quiet during the intro and while a question is being asked or answered.
   const introPlaying = useRef(true)
   const asking = useRef(false)
+  // True while Sighty says "Listening", before the mic starts (so the word isn't recorded).
+  const [preparing, setPreparing] = useState(false)
+  /** Bumped on cancel/end, so a mic start still waiting on "Listening" is dropped. */
+  const askRun = useRef(0)
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
 
   useEffect(() => {
     introPlaying.current = true
@@ -82,11 +99,15 @@ export function D4Guiding() {
     }
   }, [obstacle, go])
 
-  function startAsking() {
+  async function startAsking() {
+    const id = ++askRun.current
     asking.current = true
-    voice.stop()
     buzz(30)
     setAsk({ phase: 'recording' })
+    setPreparing(true)
+    await voice.say('Listening', { force: true })
+    if (id !== askRun.current) return // cancelled or ended while speaking
+    setPreparing(false)
     live.start()
   }
 
@@ -114,24 +135,43 @@ export function D4Guiding() {
   }
 
   function cancel() {
+    askRun.current++
+    setPreparing(false)
+    voice.stop()
     live.cancel()
     setAsk({ phase: 'idle' })
     asking.current = false
   }
 
-  /** The whole screen is the tap target: first tap records, second tap sends. */
-  function tap() {
+  /** The whole screen is the tap target: one tap records, the next sends; a double-tap ends the walk. */
+  function singleTap() {
     if (ask.phase === 'recording') {
-      if (!live.starting) void send()
-    } else if (ask.phase !== 'sending') startAsking()
+      if (!preparing && !live.starting) void send()
+    } else if (ask.phase !== 'sending') void startAsking()
+  }
+
+  function tap() {
+    if (tapTimer.current) {
+      clearTimeout(tapTimer.current)
+      tapTimer.current = null
+      void end()
+      return
+    }
+    // Wait briefly to see whether a second tap follows.
+    tapTimer.current = setTimeout(() => {
+      tapTimer.current = null
+      singleTap()
+    }, DOUBLE_TAP_MS)
   }
 
   useVoiceCommands(
-    { 'hey sighty': startAsking, 'what is ahead': () => session.describe('manual'), 'end walk': () => end() },
+    { 'hey sighty': () => void startAsking(), 'what is ahead': () => session.describe('manual'), 'end walk': () => end() },
     ask.phase === 'idle' || ask.phase === 'answered',
   )
 
   async function end() {
+    askRun.current++
+    buzz([40, 60, 40])
     live.cancel()
     voice.stop()
     await session.end()
@@ -141,6 +181,12 @@ export function D4Guiding() {
   const narration = DEMO
     ? 'Path is clear. Keep going straight — the bench is 3 metres ahead on your right.'
     : session.lastAlert ?? session.status ?? 'Sighty describes what’s ahead every few seconds, and right away when the harness feels something.'
+
+  // The harness sensor or the latest camera look can each make the path unsafe.
+  const path = DEMO ? 'Clear'
+    : obstacle || session.urgency === 'high' ? 'Stop'
+    : session.urgency === 'medium' ? 'Caution'
+    : 'Clear'
 
   return (
     <Screen>
@@ -153,7 +199,7 @@ export function D4Guiding() {
         <CameraFeed demoDetection={DEMO} />
         <Gap h={14} />
         <div className="flex shrink-0 gap-2.5">
-          <StatTile tone="blue" label="Path" value={obstacle ? 'Stop' : 'Clear'} />
+          <StatTile tone="blue" label="Path" value={path} />
           {DEMO ? <StatTile tone="yellow" label="Bench" value="3 m" /> : (
             <StatTile tone="yellow" label="Harness" value={link.harnessOnline ? 'On' : 'Off'} />
           )}
@@ -164,8 +210,8 @@ export function D4Guiding() {
           <section className="flex shrink-0 flex-col gap-2 rounded-[22px] border-2 border-dashed border-gs-action bg-gs-surface p-4" role="status">
             <p className="t-caption flex items-center gap-2 text-gs-stop">
               <span className="size-2 rounded-full bg-gs-stop" />
-              <span className="flex-1">{live.starting ? 'Starting the microphone…' : 'Listening… tap anywhere to send'}</span>
-              <VoiceBars heights={[6, 12, 18, 10, 16, 8, 14, 6]} width={3} gap={3} color="bg-gs-action" active={!live.starting} />
+              <span className="flex-1">{preparing || live.starting ? 'Starting the microphone…' : 'Listening… tap anywhere to send'}</span>
+              <VoiceBars heights={[6, 12, 18, 10, 16, 8, 14, 6]} width={3} gap={3} color="bg-gs-action" active={!preparing && !live.starting} />
             </p>
             <p className={cx('t-title-m break-words', !live.text && 'text-gs-muted')}>
               {live.text || (live.live === false ? 'Speak now. Your words show up when you send.' : 'Ask me anything about what’s ahead')}
@@ -205,12 +251,12 @@ export function D4Guiding() {
 }
 
 export function D5Obstacle() {
-  const { go, back, session, prefs, setExchange } = useApp()
+  const { go, back, session, prefs } = useApp()
   const o = session.obstacle
   // The server's alert sentence when it has arrived; otherwise the harness distance.
   const metres = o?.cm ? (o.cm / 100).toFixed(1).replace(/\.0$/, '') : null
   const what = DEMO ? 'Pole 0.5 m ahead, slightly to your left.' : o?.speak ?? (metres ? `Something ${metres} m ahead.` : 'Something is close ahead.')
-  const tip = DEMO ? 'Step to the right to pass.' : 'Wait, or ask what it is.'
+  const tip = DEMO ? 'Step to the right to pass.' : 'Wait until it’s clear.'
   useAutoRead(`Stop. ${what} ${tip}`)
 
   useEffect(() => {
@@ -225,15 +271,7 @@ export function D5Obstacle() {
     else go('d4')
   }
 
-  function whatIsIt() {
-    setExchange({ question: 'What is it?', answer: null })
-    go('d3')
-    session.ask('What is the obstacle right in front of me? Answer in one short sentence.')
-      .then((r) => setExchange({ question: 'What is it?', answer: r.alert.speak }))
-      .catch((e) => setExchange({ question: 'What is it?', answer: null, error: errorText(e) }))
-  }
-
-  useVoiceCommands({ clear: clear, 'what is it': whatIsIt })
+  useVoiceCommands({ clear: clear })
 
   return (
     <Screen bg="bg-gs-yellow">
@@ -251,8 +289,6 @@ export function D5Obstacle() {
       <p className="t-body-l text-center">{tip}</p>
       <Gap h={28} />
       <Button onClick={clear}>I’m clear</Button>
-      <Gap h={10} />
-      <Button variant="secondary" className="bg-white" onClick={whatIsIt}>What is it?</Button>
     </Screen>
   )
 }
@@ -442,41 +478,59 @@ export function D8Summary() {
   const { go, session } = useApp()
   const [saveRoute, setSaveRoute] = useState(false)
   const [daily, setDaily] = useState(false)
-  const seconds = session.startedAt && session.endedAt ? Math.round((session.endedAt - session.startedAt) / 1000) : 0
+  const seconds = DEMO ? 252 : session.startedAt && session.endedAt ? Math.round((session.endedAt - session.startedAt) / 1000) : 0
+  const alerts = DEMO ? 1 : session.alerts
+  const walked = DEMO ? 180 : Math.round(session.walked)
   const spotted = DEMO ? ['Crosswalk', 'Bus stop 14', 'Pole', 'Bench'] : session.spotted
   const title = DEMO ? 'You made it to the bench!' : 'Nice walk!'
-  useAutoRead(`${title} ${spotted.length ? `Sighty spotted ${spotted.join(', ')}.` : ''}`)
+
+  // Always spoken (like Guide mode), so the summary works without looking.
+  const summary = `${title} You walked for ${spokenTime(seconds)}, covered ${plural(walked, 'metre')}, ` +
+    `and had ${alerts ? plural(alerts, 'alert') : 'no alerts'}. ` +
+    `${spotted.length ? `Sighty spotted ${spotted.join(', ')}. ` : ''}Tap the screen to go back home.`
+  useEffect(() => {
+    void voice.say(summary, { force: true })
+    return () => voice.stop()
+  }, [summary])
+
+  function home() {
+    buzz(40)
+    go('d1')
+  }
 
   return (
     <Screen>
-      <Hero tone="yellow" radius={32} className="max-h-[200px] min-h-[150px]"><Mascot size={144} /></Hero>
-      <Gap h={16} />
-      <h1 className="t-display-l text-center">{title}</h1>
-      <Gap h={14} />
-      {spotted.length > 0 && (
-        <>
-          <section className="flex shrink-0 flex-col items-center gap-2.5 rounded-[20px] bg-gs-pink p-3">
-            <h2 className="t-overline text-tile-pink-fg normal-case tracking-normal">Sighty spotted</h2>
-            <ul className="flex flex-wrap justify-center gap-1.5">
-              {spotted.map((s) => <li key={s} className="t-label-m rounded-full bg-white px-3 py-1.5">{s}</li>)}
-            </ul>
-          </section>
-          <Gap h={10} />
-        </>
-      )}
-      <div className="flex shrink-0 gap-2.5">
-        <StatTile tone="blue" label="Time" value={DEMO ? '4:12' : clock(seconds)} />
-        <StatTile tone="yellow" label="Alerts" value={DEMO ? '1' : String(session.alerts)} />
-        <StatTile tone="green" label="Walked" value={DEMO ? '180 m' : `${Math.round(session.walked)} m`} />
+      {/* The whole screen is one tap target that goes home; the route toggles keep their own taps. */}
+      <div className="flex min-h-0 flex-1 cursor-pointer select-none flex-col" onClick={home}>
+        <Hero tone="yellow" radius={32} className="max-h-[200px] min-h-[150px]"><Mascot size={144} /></Hero>
+        <Gap h={16} />
+        <h1 className="t-display-l text-center">{title}</h1>
+        <Gap h={14} />
+        {spotted.length > 0 && (
+          <>
+            <section className="flex shrink-0 flex-col items-center gap-2.5 rounded-[20px] bg-gs-pink p-3">
+              <h2 className="t-overline text-tile-pink-fg normal-case tracking-normal">Sighty spotted</h2>
+              <ul className="flex flex-wrap justify-center gap-1.5">
+                {spotted.map((s) => <li key={s} className="t-label-m rounded-full bg-white px-3 py-1.5">{s}</li>)}
+              </ul>
+            </section>
+            <Gap h={10} />
+          </>
+        )}
+        <div className="flex shrink-0 gap-2.5">
+          <StatTile tone="blue" label="Time" value={clock(seconds)} />
+          <StatTile tone="yellow" label="Alerts" value={String(alerts)} />
+          <StatTile tone="green" label="Walked" value={`${walked} m`} />
+        </div>
+        <Gap h={10} />
+        {/* TODO(server): saved routes and reminders aren't stored yet; these only toggle locally. */}
+        <div className="flex shrink-0 cursor-auto flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+          <ListRow title="Save this route?" subtitle="Walk it again any time." done={saveRoute} onAction={() => setSaveRoute((v) => !v)} />
+          <ListRow title="Turn on daily walks?" subtitle="Sighty reminds you at 9 am." done={daily} onAction={() => setDaily((v) => !v)} />
+        </div>
+        <div className="min-h-2 flex-1" />
       </div>
-      <Gap h={10} />
-      {/* TODO(server): saved routes and reminders aren't stored yet; these only toggle locally. */}
-      <div className="flex shrink-0 flex-col gap-2">
-        <ListRow title="Save this route?" subtitle="Walk it again any time." done={saveRoute} onAction={() => setSaveRoute((v) => !v)} />
-        <ListRow title="Turn on daily walks?" subtitle="Sighty reminds you at 9 am." done={daily} onAction={() => setDaily((v) => !v)} />
-      </div>
-      <div className="min-h-2 flex-1" />
-      <ActionBar label="Done" onClose={() => go('d1')} onPrimary={() => go('d1')} />
+      <ActionBar label="Done" onClose={home} onPrimary={home} />
     </Screen>
   )
 }

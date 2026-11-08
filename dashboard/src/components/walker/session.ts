@@ -56,6 +56,8 @@ export function useWalkSession(link: LiveLink) {
   const [hasCamera, setHasCamera] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [lastAlert, setLastAlert] = useState<string | null>(null)
+  // Urgency of the latest camera look, so Guide mode can show hazards the harness didn't feel.
+  const [urgency, setUrgency] = useState<Alert['urgency']>('low')
   const [obstacle, setObstacle] = useState<Obstacle | null>(null)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [endedAt, setEndedAt] = useState<number | null>(null)
@@ -113,6 +115,7 @@ export function useWalkSession(link: LiveLink) {
       const image = canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1]
       const { alert } = await api.sendFrame(walkId.current, image, trigger, location.current)
       setLastAlert(alert.speak)
+      setUrgency(alert.urgency)
       note(alert.speak)
       if (alert.urgency !== 'low') setAlerts((n) => n + 1)
       onAlertRef.current?.(alert, trigger)
@@ -139,6 +142,7 @@ export function useWalkSession(link: LiveLink) {
       setAlerts(0)
       setWalked(0)
       setSpotted([])
+      setUrgency('low')
       setStatus(null)
       return id
     } catch (e) {
@@ -168,6 +172,7 @@ export function useWalkSession(link: LiveLink) {
     const canvas = grabFrame(video.current)
     const image = canvas ? await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY)) : null
     const res = await api.askQuestion(id, audio, image, location.current)
+    if (image) setUrgency(res.alert.urgency)
     note(res.alert.speak)
     return res
   }, [start, note])
@@ -225,9 +230,9 @@ export function useWalkSession(link: LiveLink) {
   useEffect(() => () => stream.current?.getTracks().forEach((t) => t.stop()), [])
 
   return {
-    active, hasCamera, status, lastAlert, obstacle, startedAt, endedAt, alerts, walked, spotted,
+    active, hasCamera, status, lastAlert, urgency, obstacle, startedAt, endedAt, alerts, walked, spotted,
     attachVideo, requestMedia, start, end, describe, ask,
-    clearObstacle: () => setObstacle(null),
+    clearObstacle: () => { setObstacle(null); setUrgency('low') },
     onAlert,
     /** Mic stream for recording a question (shares the camera's permission prompt when possible). */
     micStream: async () => {
