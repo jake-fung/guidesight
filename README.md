@@ -95,7 +95,9 @@ commands need the server link.
 3. **Harness key**: set `HARNESS_KEY` in `server/.env` and the same value in `arduino_secrets.h`.
    With Auth0 on, harnesses can't connect without it.
 4. **Gemini**: set `GEMINI_API_KEY`. `GEMINI_MODEL` defaults to `gemini-flash-latest`.
-5. **ElevenLabs** (speech-to-text): set `ELEVENLABS_API_KEY`. `ELEVENLABS_STT_MODEL` defaults to `scribe_v2`.
+5. **ElevenLabs** (speech-to-text for questions, text-to-speech for spoken alerts): set `ELEVENLABS_API_KEY`.
+   `ELEVENLABS_STT_MODEL` defaults to `scribe_v2`, `ELEVENLABS_TTS_MODEL` to `eleven_flash_v2_5`, and
+   `ELEVENLABS_VOICE_ID` to a premade voice. Without a key, the app speaks with the phone's built-in voice.
 6. **Hosting**: the web app is static (`npm run build` → `dashboard/dist`); route every path to
    `index.html` so `/walk` loads. If the server is on another host, set `VITE_API_URL` and add the web
    app's origin to `CORS_ORIGINS`. Run the server as a **single process** with threads (for example
@@ -118,6 +120,7 @@ All routes need `Authorization: Bearer <Auth0 access token>` (any token in mock 
 | `POST /api/walks/:id/frame`           | `{image: base64 jpeg, trigger, location}`         | `{alert, scene}`, buzzes the harness |
 | `POST /api/walks/:id/voice`           | multipart: `audio`, optional `image`, `lat`, `lng`| `{transcript, alert}`           |
 | `POST /api/walks/:id/end`             | –                                                 | walk                            |
+| `POST /api/tts`                       | `{text, speed}`                                   | `audio/mpeg` clip; 503 without an ElevenLabs key |
 | `GET  /api/walks/:id`                 | –                                                 | `{walk, events}`                |
 | `GET/PUT /api/settings`               | voice, alert & accessibility preferences, `harness_id` | settings                   |
 | `GET  /api/harness/status`            | –                                                 | `{harness_id, online}`          |
@@ -177,4 +180,3 @@ users/{uid}/walks/{walkId}/events/{eventId}  { type: obstacle|stop|pull|alert|qu
 - Calibrate `OBSTACLE_CM` / `CLEAR_CM` in `firmware/uno_r4/uno_r4.ino` on a real harness.
 - Hands-free voice (wake word / voice activity detection) instead of tap-to-ask.
 - Background operation: keep the walk running with the screen locked.
-- Optional server-side TTS voices (`server/app/services/alerts.py`).

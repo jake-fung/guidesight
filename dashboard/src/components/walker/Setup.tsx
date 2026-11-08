@@ -103,7 +103,6 @@ export default function Setup({ link, onStart }: { link: LiveLink; onStart: () =
 
       <BigButton onClick={start} className="mt-auto min-h-24 text-2xl">Start walk</BigButton>
       {!DEV_MODE && <BigButton variant="secondary" onClick={logout}>Sign out</BigButton>}
-      <a href="/" className="text-center text-zinc-400 underline">Walk dashboard</a>
     </main>
   )
 }

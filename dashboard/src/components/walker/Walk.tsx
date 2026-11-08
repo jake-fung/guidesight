@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type FrameTrigger, type LatLng } from '../../lib/api'
 import type { LiveLink } from '../../lib/live'
-import { speakAlert } from '../../lib/speech'
+import { speakAlert, stopSpeech } from '../../lib/speech'
 import BigButton from './BigButton'
 
 const PERIODIC_FRAME_MS = 15_000
@@ -127,7 +127,7 @@ export default function Walk({ link, onEnd }: { link: LiveLink; onEnd: () => voi
   function startQuestion() {
     const audio = stream.current?.getAudioTracks() ?? []
     if (!audio.length) return setStatus('Microphone not available')
-    speechSynthesis.cancel() // don't record the app talking
+    stopSpeech() // don't record the app talking
     const rec = new MediaRecorder(new MediaStream(audio))
     chunks.current = []
     rec.ondataavailable = (e) => {
@@ -167,7 +167,7 @@ export default function Walk({ link, onEnd }: { link: LiveLink; onEnd: () => voi
 
   async function endWalk() {
     if (walkId.current) await api.endWalk(walkId.current).catch(() => {})
-    speechSynthesis.cancel()
+    stopSpeech()
     onEnd()
   }
 

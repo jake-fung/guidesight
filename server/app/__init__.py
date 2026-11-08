@@ -21,12 +21,14 @@ def create_app(testing: bool = False) -> Flask:
     from .routes.settings import bp as settings_bp
     from .routes.setup import bp as setup_bp
     from .routes.walks import bp as walks_bp
+    from .routes.tts import bp as tts_bp
 
     app.register_blueprint(me_bp, url_prefix="/api/me")
     app.register_blueprint(setup_bp, url_prefix="/api/setup")
     app.register_blueprint(walks_bp, url_prefix="/api/walks")
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(harness_bp, url_prefix="/api/harness")
+    app.register_blueprint(tts_bp, url_prefix="/api/tts")
 
     @app.errorhandler(HTTPException)
     def json_error(e):

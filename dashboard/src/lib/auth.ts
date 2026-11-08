@@ -55,6 +55,13 @@ export async function getToken(): Promise<string> {
   return token
 }
 
+/** The signed-in person's email from their Auth0 profile (null in dev mode). */
+export async function getEmail(): Promise<string | null> {
+  if (!client) return null
+  await ready
+  return (await client.getUser())?.email ?? null
+}
+
 /** Why the last sign-in failed, if it did. */
 export const getAuthError = () => authError
 

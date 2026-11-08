@@ -20,7 +20,7 @@ export default function Login() {
     <main className="grid min-h-dvh place-items-center bg-zinc-950 px-4 text-zinc-100">
       <div className="w-full max-w-sm space-y-4 rounded-2xl bg-zinc-900 p-8">
         <h1 className="text-3xl font-bold">GuideSight</h1>
-        <p className="text-lg text-zinc-300">Sign in to start a walk or review past walks.</p>
+        <p className="text-lg text-zinc-300">Sign in or create an account to start walking with Sighty.</p>
         {error && <p className="text-red-400" role="alert">{error}</p>}
         <button type="button" disabled={busy} onClick={() => go(login)}
           className="min-h-14 w-full rounded-xl bg-amber-400 text-xl font-bold text-zinc-950 hover:bg-amber-300 disabled:opacity-50">

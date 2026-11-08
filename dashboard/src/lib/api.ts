@@ -5,19 +5,23 @@ export const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 export type LatLng = { lat: number; lng: number }
 
-// ---- Dashboard ----------------------------------------------------------------
-export type StopPoint = { walk_id: string; type: 'stop' | 'pull' | 'obstacle'; at: string; lat: number; lng: number }
-export type Hotspot = { lat: number; lng: number; count: number }
-export type WalkStat = {
-  id: string
-  started_at: string
-  minutes: number
-  stops: number
-  pulls: number
-  obstacles: number
-  fatigue: number | null
+// ---- Account & first-run setup (server/app/routes/me.py, setup.py) -----------
+export type Profile = { name: string | null; email: string | null }
+export type PermissionAnswer = 'pending' | 'allowed' | 'skipped'
+export type SetupState = {
+  camera: PermissionAnswer
+  microphone: PermissionAnswer
+  sensor: 'pending' | 'connected' | 'skipped'
+  completed_at: string | null
 }
-export type Summary = { walks: WalkStat[]; stops: StopPoint[]; hotspots: Hotspot[] }
+/** Which screen to show. null = setup is done, go Home. */
+export type NextStep = 'name' | 'camera' | 'microphone' | 'sensor' | 'finish' | null
+export type Me = { id: string; profile: Profile; setup: SetupState; settings: Settings; next_step: NextStep }
+export type SensorSearch = {
+  harness_id: string | null
+  online: boolean
+  nearby: { id: string; same_network: boolean }[]
+}
 
 // ---- Walker app ---------------------------------------------------------------
 export type HapticPattern = 'short' | 'double' | 'long'
@@ -34,32 +38,58 @@ export type Settings = {
   haptics_enabled: boolean
   harness_id: string | null
   auto_describe_on_stop: boolean
+  text_size: 'default' | 'large' | 'extra_large'
+  high_contrast: boolean
+  read_screen_aloud: boolean
+  zoom: boolean
+  voice_control: boolean
 }
 export type HarnessEventType = 'stop' | 'pull' | 'obstacle'
 /** obstacle comes from the UNO R4's ultrasonic sensor (cm); stop/pull from a motion sensor (accel). */
 export type HarnessEvent = { type: HarnessEventType; cm?: number; accel?: number; ms?: number }
 export type FrameTrigger = HarnessEventType | 'periodic' | 'manual'
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** Error from the API, with the HTTP status so callers can react to it (e.g. 503 = feature not set up). */
+export class ApiError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function send(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${await getToken()}`)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
 
   const res = await fetch(`${API_URL}/api${path}`, { ...init, headers })
-  if (!res.ok) throw new Error(`${init.method ?? 'GET'} ${path} failed: ${res.status}`)
-  return res.json() as Promise<T>
+  if (!res.ok) {
+    // The server explains errors as {error: "..."}.
+    const reason = await res.json().then((b) => b?.error).catch(() => null)
+    throw new ApiError(reason ?? `${init.method ?? 'GET'} ${path} failed: ${res.status}`, res.status)
+  }
+  return res
 }
+
+const request = <T>(path: string, init: RequestInit = {}) => send(path, init).then((r) => r.json() as Promise<T>)
 
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })
+const put = <T>(path: string, body: unknown) => request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
 
 export const api = {
-  summary: () => request<Summary>('/dashboard/summary'),
-  /** Mock-mode server only: generates demo walks. */
-  seedDemo: () => post('/dev/seed'),
+  me: () => request<Me>('/me'),
+  saveProfile: (p: Partial<Profile>) => put<Me>('/me', p),
+  answerSetup: (step: 'camera' | 'microphone' | 'sensor', status: 'allowed' | 'skipped') =>
+    put<Me>(`/setup/${step}`, { status }),
+  findSensor: () => request<SensorSearch>('/setup/sensor'),
+  pairSensor: (harnessId: string) =>
+    post<{ harness_id: string; buzzed: boolean; me: Me }>('/setup/sensor', { harness_id: harnessId }),
+  completeSetup: () => post<Me>('/setup/complete'),
 
   getSettings: () => request<Settings>('/settings'),
-  saveSettings: (s: Partial<Settings>) => request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(s) }),
+  saveSettings: (s: Partial<Settings>) => put<Settings>('/settings', s),
 
   harnessStatus: () => request<{ harness_id: string | null; online: boolean }>('/harness/status'),
   buzz: (pattern: HapticPattern) => post<{ delivered: boolean }>('/harness/buzz', { pattern }),
@@ -85,6 +115,10 @@ export const api = {
     }
     return request<{ transcript: string; alert: Alert }>(`/walks/${walkId}/voice`, { method: 'POST', body: form })
   },
+
+  /** Alert text as an MP3 clip in the ElevenLabs voice. 503 = the server has no ElevenLabs key. */
+  speech: (text: string, speed: number, signal?: AbortSignal) =>
+    send('/tts', { method: 'POST', body: JSON.stringify({ text, speed }), signal }).then((r) => r.blob()),
 }
 
 /** WebSocket URL for a server path, on the same host as the API. */
