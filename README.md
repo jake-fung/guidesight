@@ -76,6 +76,20 @@ The harness beeps faster as things get closer even when it's offline. Online, it
 something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
 commands need the server link.
 
+### ESP32 instead of the UNO R4
+
+`firmware/esp32/` is the same firmware for an ESP32 dev board (board **ESP32 Dev Module**, core
+**esp32 by Espressif**, plus **ArduinoHttpClient**). Setup steps are the same, using
+`firmware/esp32/arduino_secrets.example.h`. The blue LED on the board is on while it's connected.
+
+| From | To ESP32 (pins printed as D5, D18...) |
+|---|---|
+| HC-SR04 VCC / GND | VIN (5 V) / GND |
+| HC-SR04 TRIG | D5 |
+| HC-SR04 ECHO | 1 kΩ → D18, plus 2 kΩ from D18 to GND (ESP32 pins are 3.3 V) |
+| Buzzer + / − / S | 3V3 / GND / D23 |
+| Vibration motor (optional) | D19 → 1 kΩ → 2N2222 base, 1N4148 across the motor |
+
 ## Going live
 
 1. **Firestore** (storage): create a Firebase project with Firestore, download a service-account JSON

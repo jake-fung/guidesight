@@ -11,6 +11,6 @@ serviceAccount*.json
 secrets/
 
 # Arduino (Wi-Fi + server credentials)
-firmware/uno_r4/arduino_secrets.h
+firmware/*/arduino_secrets.h
 
 .DS_Store
