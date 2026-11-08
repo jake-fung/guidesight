@@ -37,7 +37,7 @@ Built for HackCamp 2026.
 - ElevenLabs for speech-to-text (questions) and text-to-speech (spoken alerts).
 - Google Maps — Places API (New) + Routes API — for walking directions.
 - React + Vite + Tailwind v4 walker web app.
-- ESP32 (or Arduino UNO R4 WiFi) + HC-SR04 ultrasonic sensor + buzzer firmware.
+- ESP32 + HC-SR04 ultrasonic sensor + buzzer firmware.
 
 ## Architecture Overview
 
@@ -122,19 +122,6 @@ On iPhones, tap the first screen (**Tap anywhere to start**) yourself: Safari on
 The harness beeps faster as things get closer even when it's offline. Online, it tells the phone when
 something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
 commands need the server link.
-
-### Arduino UNO R4 WiFi instead of the ESP32
-
-`firmware/uno_r4/` is the same firmware for a UNO R4 WiFi (board **Arduino UNO R4 Boards** core,
-plus **ArduinoHttpClient**), using `firmware/uno_r4/arduino_secrets.example.h`. The built-in LED is
-on while it's connected. On Apple Silicon Macs the R4 core's compiler needs Rosetta:
-`softwareupdate --install-rosetta --agree-to-license`.
-
-| From | To UNO R4 WiFi |
-|---|---|
-| HC-SR04 VCC / GND | 5V / GND |
-| HC-SR04 TRIG / ECHO | D9 / D10 (no resistors needed, the R4 is 5 V) |
-| Buzzer + / − / S | 3.3V / GND / D8 |
 
 ## Going live
 
