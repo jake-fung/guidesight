@@ -311,13 +311,38 @@ export function useAutoRead(text: string, active = true) {
   }, [text, active])
 }
 
-/** Short buzz on phones that support it (Android; iOS Safari ignores it). */
+/** Gap between haptic ticks when an iPhone plays one "on" stretch of a buzz pattern. */
+const IOS_TICK_MS = 70
+
+/**
+ * Buzz in the navigator.vibrate pattern format (on, off, on… in ms). Android vibrates; iPhones have no
+ * vibrate(), so each "on" stretch plays as haptic ticks instead (Safari on iOS 18+).
+ */
 export function buzz(pattern: number | number[] = 60) {
   try {
-    navigator.vibrate?.(pattern)
+    if (typeof navigator.vibrate === 'function') return void navigator.vibrate(pattern)
+    let t = 0
+    ;(Array.isArray(pattern) ? pattern : [pattern]).forEach((ms, i) => {
+      if (i % 2 === 0) for (let at = 0; at < ms; at += IOS_TICK_MS) setTimeout(hapticTick, t + at)
+      t += ms
+    })
   } catch {
     // not supported
   }
+}
+
+/** One haptic tick on iOS Safari, which plays one whenever a switch-style checkbox is toggled. */
+function hapticTick() {
+  const label = document.createElement('label')
+  label.ariaHidden = 'true'
+  label.style.display = 'none'
+  const input = document.createElement('input')
+  input.type = 'checkbox'
+  input.setAttribute('switch', '')
+  label.appendChild(input)
+  document.head.appendChild(label)
+  label.click()
+  label.remove()
 }
 
 // ---- Speech recognition -----------------------------------------------------------------------

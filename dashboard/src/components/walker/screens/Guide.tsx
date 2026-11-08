@@ -1,7 +1,7 @@
 // D4 Guiding · D5 Obstacle alert · D6 Read text · D7 Settings · D8 Trip summary
 import { useEffect, useRef, useState } from 'react'
 import { DEMO } from '../demo'
-import type { Alert, Avoid, SeenObstacle } from '../../../lib/api'
+import { api, type Alert, type Avoid, type SeenObstacle } from '../../../lib/api'
 import { HarnessPairing } from '../Pairing'
 import { icons } from '../icons'
 import { shortDistance } from '../navigation'
@@ -135,12 +135,9 @@ export function D4Guiding() {
     }
   }, [start, onAlert, onNav, onProblem, route])
 
-  // An obstacle from the harness takes over the screen.
+  // An obstacle from the harness takes over the screen (which vibrates when it opens).
   useEffect(() => {
-    if (obstacle) {
-      buzz([200, 100, 200])
-      go('d5')
-    }
+    if (obstacle) go('d5')
   }, [obstacle, go])
 
   async function startAsking() {
@@ -373,8 +370,11 @@ export function D5Obstacle() {
     return () => voice.stop()
   }, [what, tip])
 
+  // Vibrates the phone as soon as it opens and every 1.5 s after, plus one long buzz on the harness.
   useEffect(() => {
     if (!prefs.vibration) return
+    buzz([200, 100, 200])
+    if (!DEMO) api.buzz('long').catch(() => {}) // no harness connected: the phone still buzzes
     const t = setInterval(() => buzz([200, 100, 200]), 1500)
     return () => clearInterval(t)
   }, [prefs.vibration])

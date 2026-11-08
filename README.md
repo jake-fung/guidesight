@@ -127,7 +127,8 @@ On iPhones, tap the first screen (**Tap anywhere to start**) yourself: Safari on
    same harness ID and tap **Save**, then **Test buzz**.
 
 The harness beeps faster as things get closer even when it's offline. Online, it tells the phone when
-something comes within 1.5 m and again each 50 cm closer, so the walker hears the distance count down. Obstacle events and buzz
+something comes within 1.5 m, again each 50 cm closer, and as soon as it's within 50 cm. The phone's stop screen
+only opens within 50 cm; it vibrates the phone and sends a long buzz to the harness. Obstacle events and buzz
 commands need the server link.
 
 ### How to wear it

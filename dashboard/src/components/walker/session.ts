@@ -35,7 +35,7 @@ export function grabFrame(video: HTMLVideoElement | null): HTMLCanvasElement | n
 }
 
 /**
- * What opens the stop screen: something close ahead from the harness sensor (cm, exact), described by
+ * What opens the stop screen: something within 50 cm from the harness sensor (cm, exact), described by
  * the camera (what it is, which way to step around it), a danger the camera saw at any distance, or
  * stairs/a drop-off within 1 metre.
  */
@@ -50,6 +50,8 @@ export type Obstacle = {
   at: number
 }
 
+/** The harness sensor opens the stop screen only when something is this close (cm). */
+const STOP_CM = 50
 /** After "I'm clear", the same danger (e.g. a red light while waiting) doesn't stop the walker again this soon. */
 const DANGER_SNOOZE_MS = 20_000
 /** While stairs or a drop-off are ahead but not yet close, look again this soon (not every 6-15 s). */
@@ -395,13 +397,16 @@ export function useWalkSession(link: LiveLink) {
 
     setEventHandler(async (e: HarnessEvent) => {
       if (!walkId.current) return
-      // Each closer reading updates the distance on the obstacle screen; the camera's view is kept.
-      if (e.type === 'obstacle') setObstacle((cur) => ({ ...cur, cm: e.cm, speak: cur?.speak ?? null, at: Date.now() }))
+      // Only something within STOP_CM opens the stop screen. Each closer reading updates the distance
+      // on it; the camera's view is kept.
+      const near = e.type === 'obstacle' && e.cm !== undefined && e.cm <= STOP_CM
+      if (near) setObstacle((cur) => ({ ...cur, cm: e.cm, speak: cur?.speak ?? null, at: Date.now() }))
       try {
         const res = await api.harnessEvent(walkId.current, e, location.current)
         if (res.capture_frame) {
           const alert = await describe(e.type)
-          if (alert && e.type === 'obstacle') {
+          // Further away, the stop screen still opens for a danger the camera sees (red light, traffic…).
+          if (alert && e.type === 'obstacle' && (near || alert.danger)) {
             setObstacle((cur) => ({
               cm: cur?.cm ?? e.cm, speak: alert.speak, seen: alert.obstacle, avoid: alert.avoid, danger: alert.danger, drop: alert.drop, at: Date.now(),
             }))

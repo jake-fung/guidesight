@@ -4,7 +4,7 @@
 //
 // Talks to the Flask server over Wi-Fi, through a WebSocket it keeps open (server/app/live.py):
 //   harness -> server: {"type":"hello","id":...,"key":...} once, then {"type":"obstacle","cm":85}
-//   (again each time the obstacle comes 50 cm closer)
+//   (again each time the obstacle comes 50 cm closer, and when it comes within 50 cm)
 //                      and "ping" every 15 s
 //   server -> harness: "short" | "double" | "long" (buzz pattern), or "pong"
 // The server forwards obstacle events to the walker web app on the phone.
@@ -39,6 +39,7 @@ constexpr long CLEAR_CM = 200;              // ...and re-arm once it's farther t
 constexpr long BEEP_CM = 200;               // local proximity beeping range
 constexpr uint32_t EVENT_COOLDOWN_MS = 3000;
 constexpr long CLOSER_CM = 50;              // send again each time it comes this much closer (distance alerts)
+constexpr long STOP_CM = 50;                // the phone's stop screen opens at this distance; always report crossing it
 constexpr uint32_t CLOSER_COOLDOWN_MS = 800;
 constexpr uint32_t SAMPLE_MS = 60;          // HC-SR04 needs ~60 ms between pings
 
@@ -212,9 +213,10 @@ void loop() {
   long cm = readDistanceCm();
 
   // Phone event: fire when something comes close, again each CLOSER_CM nearer (so the phone can
-  // count the distance down), and re-arm once it's clear again.
+  // count the distance down) or as soon as it's within STOP_CM, and re-arm once it's clear again.
   bool first = armed && cm > 0 && cm < OBSTACLE_CM && now - lastEventAt > EVENT_COOLDOWN_MS;
-  bool closer = !armed && cm > 0 && cm <= lastSentCm - CLOSER_CM && now - lastEventAt > CLOSER_COOLDOWN_MS;
+  bool nearer = cm <= lastSentCm - CLOSER_CM || (cm <= STOP_CM && lastSentCm > STOP_CM);
+  bool closer = !armed && cm > 0 && nearer && now - lastEventAt > CLOSER_COOLDOWN_MS;
   if (first || closer) {
     armed = false;
     lastEventAt = now;
