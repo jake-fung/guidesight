@@ -4,7 +4,7 @@ import { icons } from '../icons'
 import { useApp, type Exchange } from '../state'
 import { errorText } from '../session'
 import { Button, Chip, Gap, Mascot, NavHeader, Screen, Toggle, VoiceBars, cx } from '../ui'
-import { canListen, useAutoRead, useListen, voice } from '../voice'
+import { canListen, useAutoRead, useListen, voice, watchForPause } from '../voice'
 
 function greeting() {
   const h = new Date().getHours()
@@ -119,23 +119,30 @@ export function D2Listening() {
   const chunks = useRef<Blob[]>([])
   const [error, setError] = useState<string | null>(null)
   const finished = useRef(false)
+  // finish() as of the latest render, for the pause detector set up once in the effect below.
+  const finishRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     voice.stop() // don't record Sighty talking
     let rec: MediaRecorder | null = null
     let cancelled = false
+    let stopWatching = () => {}
     session.micStream()
       .then((stream) => {
-        if (cancelled || typeof MediaRecorder === 'undefined') return
+        if (cancelled) return stream.getTracks().forEach((t) => t.stop()) // left the screen first
+        if (typeof MediaRecorder === 'undefined') return
         rec = new MediaRecorder(stream)
         chunks.current = []
         rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data)
         rec.start()
         recorder.current = rec
+        // Send the question when the person stops talking ("or just pause").
+        stopWatching = watchForPause(stream, () => finishRef.current())
       })
       .catch((e) => setError(`Microphone not available: ${errorText(e)}`))
     return () => {
       cancelled = true
+      stopWatching()
       if (rec && rec.state !== 'inactive') rec.stop()
       rec?.stream.getTracks().forEach((t) => t.stop())
     }
@@ -152,8 +159,10 @@ export function D2Listening() {
       await new Promise((r) => { rec.onstop = r; rec.stop() })
       audio = new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' })
     }
-    // Prefer the words the user just saw on screen; fall back to the recording for server-side STT.
-    const payload = text.trim() || (audio?.size ? audio : null)
+    // The recording goes to the server's speech-to-text (ElevenLabs), which is far more accurate than
+    // the browser's recogniser. The live words on screen are only a preview, and are sent as typed
+    // text only when nothing was recorded (no MediaRecorder).
+    const payload = audio?.size ? audio : text.trim() || null
     if (!payload) {
       finished.current = false
       setError('I didn’t catch that. Try again.')
@@ -163,8 +172,13 @@ export function D2Listening() {
     go('d3')
   }
 
-  // The browser's own recogniser gives the live transcript, and ends on a pause ("or just pause").
-  const { heard } = useListen(true, (text) => finish(text))
+  useEffect(() => {
+    finishRef.current = () => finish()
+  })
+
+  // The browser's own recogniser shows the words live where it works. Its first finished phrase
+  // also ends the question, as a quicker version of the pause detector.
+  const { heard, error: listenError } = useListen(true, (text) => finish(text))
   useEffect(() => {
     latest.current = heard.final || heard.interim
   }, [heard])
@@ -186,7 +200,8 @@ export function D2Listening() {
           {said}{said && hearing ? ' ' : ''}<span className="text-gs-muted">{hearing || (!said ? '…' : '')}</span>
         </p>
         <p className="t-caption text-gs-muted">
-          {error ?? (canListen ? 'Grey words are still being heard' : 'Live captions aren’t supported in this browser — your recording is sent when you tap.')}
+          {error ?? (listenError || !canListen ? 'Live words aren’t available here. I’ll send your question when you pause.'
+            : 'Grey words are still being heard')}
         </p>
       </div>
       <Gap h={20} />
