@@ -1,9 +1,9 @@
-// Track 2 — Low vision & sighted: B1–B2 register, C1–C4 setup. The ♿ button opens the accessibility sheet.
+// Track 2 — Low vision & sighted: B1–B3 register (B3 = check name and email), C1–C4 setup. The ♿ button opens the accessibility sheet.
 import { useEffect, useState } from 'react'
 import { icons } from '../icons'
 import { useApp } from '../state'
 import { Button, Gap, Hero, IconBadge, Mascot, Radar, Screen, StatusPill, StepCard, StepHeader, TextField } from '../ui'
-import { buzz, firstWord, spellOut, spokenToEmail, useAutoRead, usePhrases, voice } from '../voice'
+import { buzz, firstWord, spellEmail, spellOut, spokenToEmail, useAutoRead, usePhrases, voice } from '../voice'
 import { HarnessPairing } from '../Pairing'
 import { useSensorAutoPair } from '../sensor'
 
@@ -14,7 +14,7 @@ function useStepHeader(step: number, of = 3) {
 
 export function B1Name() {
   const { go, profile, setProfile } = useApp()
-  const header = useStepHeader(1, 2)
+  const header = useStepHeader(1)
   const [name, setName] = useState(profile.name)
   const [dictating, setDictating] = useState(false)
   const [heard, setHeard] = useState<string | null>(null)
@@ -66,7 +66,7 @@ export function B1Name() {
 
 export function B2Email() {
   const { go, profile, setProfile } = useApp()
-  const header = useStepHeader(2, 2)
+  const header = useStepHeader(2)
   const [email, setEmail] = useState(profile.email)
   const [dictating, setDictating] = useState(false)
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -75,9 +75,8 @@ export function B2Email() {
 
   function next() {
     if (!valid) return
-    // No email code step: registering signs you in straight away.
-    setProfile({ email, signedIn: true })
-    go('c1')
+    setProfile({ email })
+    go('b3')
   }
 
   return (
@@ -96,6 +95,53 @@ export function B2Email() {
       <Gap h={20} />
       <Button onClick={next} disabled={!valid}>Continue</Button>
     </Screen>
+  )
+}
+
+/** B3: show the name and email back before saving, with a way to fix either. */
+export function B3Confirm() {
+  const { go, profile, setProfile } = useApp()
+  const header = useStepHeader(3)
+  const { name, email } = profile
+  useAutoRead(`Is this right? Your name is ${name}, ${spellOut(name)}. Your email is ${spellEmail(email)}.`)
+
+  function confirm() {
+    buzz(40)
+    // No email code step: confirming signs you in straight away.
+    setProfile({ signedIn: true })
+    go('c1')
+  }
+
+  return (
+    <Screen>
+      {header}
+      <Gap h={16} />
+      <Hero tone="yellow" className="min-h-[150px]"><Mascot size={120} /></Hero>
+      <Gap h={20} />
+      <h1 className="t-display-l">Is this right?</h1>
+      <Gap h={10} />
+      <p className="t-body-l text-gs-muted">Check your details before we save them.</p>
+      <Gap h={24} />
+      <dl className="flex flex-col gap-2.5">
+        <ConfirmRow label="Name" value={name} sub={spellOut(name)} onEdit={() => go('b1')} />
+        <ConfirmRow label="Email" value={email} onEdit={() => go('b2')} />
+      </dl>
+      <Gap h={20} />
+      <Button onClick={confirm}>Yes, looks right</Button>
+    </Screen>
+  )
+}
+
+function ConfirmRow({ label, value, sub, onEdit }: { label: string; value: string; sub?: string; onEdit: () => void }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-gs-tint py-3.5 pl-4 pr-4">
+      <div className="min-w-0 flex-1">
+        <dt className="t-caption text-gs-muted">{label}</dt>
+        <dd className="t-label-l break-all">{value}</dd>
+        {sub && <dd className="t-caption text-gs-muted">{sub}</dd>}
+      </div>
+      <button type="button" className="t-label-m text-gs-brand" onClick={onEdit} aria-label={`Edit ${label.toLowerCase()}`}>Edit</button>
+    </div>
   )
 }
 

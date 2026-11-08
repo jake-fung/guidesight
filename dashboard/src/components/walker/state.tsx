@@ -9,12 +9,12 @@ import { voice } from './voice'
 export type ScreenId =
   | 'a0' | 'a1' | 'a2' | 'a3'
   | 'v1'
-  | 'b1' | 'b2' | 'c1' | 'c2' | 'c3' | 'c4'
+  | 'b1' | 'b2' | 'b3' | 'c1' | 'c2' | 'c3' | 'c4'
   | 'd1' | 'd2' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8'
 
 /** Screens that use the camera; it's off everywhere else. */
 const CAMERA_SCREENS: ScreenId[] = ['d4', 'd5', 'd6']
-export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd4', 'd5', 'd6', 'd7', 'd8']
+export const SCREENS: ScreenId[] = ['a0', 'a1', 'a2', 'a3', 'v1', 'b1', 'b2', 'b3', 'c1', 'c2', 'c3', 'c4', 'd1', 'd2', 'd4', 'd5', 'd6', 'd7', 'd8']
 
 export type Track = 'blind' | 'low-vision' | 'sighted'
 

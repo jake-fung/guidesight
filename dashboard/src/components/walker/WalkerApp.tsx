@@ -1,11 +1,11 @@
 // Phone app for the walker (/walk). Screens follow the Figma file "GuideSight — Mobile Web Prototype":
-//   A0–A3 start and sign in · V1 voice setup chat (Figma C0–C6) · B1–C4 visual setup (low vision / sighted)
+//   A0–A3 start and sign in · V1 voice setup chat (Figma C0–C6) · B1–C4 visual setup (B3 = check name and email) (low vision / sighted)
 //   D1–D8 the app itself (D2 = where to?) · S accessibility shortcut sheet.
 import type { ComponentType } from 'react'
 import { A11ySheet, D1Home } from './screens/Home'
 import { D2Destination } from './screens/Destination'
 import { D4Guiding, D5Obstacle, D6ReadText, D7Settings, D8Summary } from './screens/Guide'
-import { B1Name, B2Email, C1Camera, C2Mic, C3Sensor, C4AllSet } from './screens/Register'
+import { B1Name, B2Email, B3Confirm, C1Camera, C2Mic, C3Sensor, C4AllSet } from './screens/Register'
 import { A0Tap, A1HowMuch, A2SignInEmail, A3SignInCode } from './screens/Start'
 import { VoiceChat } from './screens/VoiceSetup'
 import { AppProvider, useApp, type ScreenId } from './state'
@@ -14,7 +14,7 @@ import { useListen } from './voice'
 const SCREENS: Record<ScreenId, ComponentType> = {
   a0: A0Tap, a1: A1HowMuch, a2: A2SignInEmail, a3: A3SignInCode,
   v1: VoiceChat,
-  b1: B1Name, b2: B2Email, c1: C1Camera, c2: C2Mic, c3: C3Sensor, c4: C4AllSet,
+  b1: B1Name, b2: B2Email, b3: B3Confirm, c1: C1Camera, c2: C2Mic, c3: C3Sensor, c4: C4AllSet,
   d1: D1Home, d2: D2Destination, d4: D4Guiding, d5: D5Obstacle, d6: D6ReadText, d7: D7Settings, d8: D8Summary,
 }
 

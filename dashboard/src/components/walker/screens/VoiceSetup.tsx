@@ -9,15 +9,16 @@ import { useLiveTranscript } from '../transcribe'
 import { buzz, firstWord, spellEmail, spellOut, spokenToEmail, useVoiceCommands, voice } from '../voice'
 import { useSensorAutoPair } from '../sensor'
 
-type Turn = 'mic' | 'how' | 'name' | 'email' | 'camera' | 'sensor' | 'done'
-const STEP: Record<Turn, number> = { mic: 1, how: 2, name: 3, email: 4, camera: 5, sensor: 6, done: 6 }
-const STEPS = 6
+type Turn = 'mic' | 'how' | 'name' | 'email' | 'check' | 'camera' | 'sensor' | 'done'
+const STEP: Record<Turn, number> = { mic: 1, how: 2, name: 3, email: 4, check: 5, camera: 6, sensor: 7, done: 7 }
+const STEPS = 7
 
 const TAP_TO_ANSWER = 'Tap the screen to record, then tap again to confirm.'
 const TAP_TO_ALLOW = 'Tap the screen, then tap Allow.'
 const HOW = 'How much can you see? Say “I’m blind”, “low vision”, or “I can see”.'
 const NAME = 'What should I call you?'
 const EMAIL = 'What’s your email? Just say it normally.'
+const CHECK = 'Is that right? Say “yes”, or “no” to fix it.'
 /** Two taps closer together than this are a double-tap. */
 const DOUBLE_TAP_MS = 320
 
@@ -32,6 +33,7 @@ function lineFor(turn: Turn, before = ''): Line {
     case 'how': return t(HOW, TAP_TO_ANSWER)
     case 'name': return t(NAME, TAP_TO_ANSWER)
     case 'email': return t(EMAIL, TAP_TO_ANSWER)
+    case 'check': return t(CHECK, TAP_TO_ANSWER) // normally built by checkLine(), which has the name and email
     case 'camera': return t('Last permission: can I use your camera to see what’s ahead of you?', TAP_TO_ALLOW)
     case 'sensor': return t('Now switch on your GuideSight sensor and hold it near your phone.', 'Say “skip” to set it up later.')
     case 'done': return t('', '')
@@ -50,6 +52,20 @@ const emailFrom = (text: string) => {
   const e = spokenToEmail(text.replace(/^(my email is|it's|it is)\s+/i, '')).replace(/[.,!?]+$/, '')
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : ''
 }
+/** Sighty reads back the name and email (spelled out loud) before saving them. */
+function checkLine(name: string, email: string): Line {
+  return {
+    text: `Let me check. Your name is ${name} and your email is ${email}. ${CHECK}`,
+    spoken: `Let me check. Your name is ${name}, ${spellOut(name)}. Your email is ${spellEmail(email)}. ${CHECK} ${TAP_TO_ANSWER}`,
+  }
+}
+/** "yes" / "no" / null if neither. "No" wins so "that's not right" isn't read as "right". */
+function yesNo(text: string): 'yes' | 'no' | null {
+  const t = text.toLowerCase()
+  if (/\b(no|nope|nah|not|wrong|incorrect|change|fix)\b/.test(t)) return 'no'
+  if (/\b(yes|yeah|yep|yup|correct|right|sure|ok|okay|perfect)\b/.test(t)) return 'yes'
+  return null
+}
 const TRACK_SAID: Record<Track, string> = { blind: 'I’m blind', 'low-vision': 'Low vision', sighted: 'I can see' }
 
 export function VoiceChat() {
@@ -64,6 +80,8 @@ export function VoiceChat() {
   const nextId = useRef(0)
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recordingSince = useRef(0)
+  /** True while redoing just one answer from the check turn, so it goes straight back to the check. */
+  const fixingOne = useRef(false)
 
   // Say each new line; stop talking when the screen closes.
   useEffect(() => {
@@ -79,11 +97,11 @@ export function VoiceChat() {
   }, [])
 
   /** Moves to `to`, filing the current question (and the answer to it) into the history above. */
-  const advance = useCallback((to: Turn, answer: Omit<Entry, 'id'>[], before = '') => {
+  const advance = useCallback((to: Turn, answer: Omit<Entry, 'id'>[], next: Line = lineFor(to)) => {
     log({ who: 'sighty', text: line.text }, ...answer)
     setTurn(to)
     setPhase('ask')
-    setLine(lineFor(to, before))
+    setLine(next)
   }, [line.text, log])
 
   /** Same turn again, with Sighty explaining what went wrong. */
@@ -108,12 +126,12 @@ export function VoiceChat() {
     else advance('sensor', [{ who: 'done', text: 'Camera on' }])
   }
 
-  // ---- Answer turns (how, name, email) ------------------------------------------------------------
+  // ---- Answer turns (how, name, email, check) -----------------------------------------------------
   async function confirm() {
     setPhase('saving')
     buzz(40)
     const heard = (await live.finish()).trim()
-    const question = turn === 'how' ? HOW : turn === 'name' ? NAME : EMAIL
+    const question = turn === 'how' ? HOW : turn === 'name' ? NAME : turn === 'email' ? EMAIL : CHECK
     if (!heard) return retry('I didn’t hear anything.', question)
 
     if (turn === 'how') {
@@ -128,18 +146,40 @@ export function VoiceChat() {
         return
       }
       setPrefs({ readAloud: true })
-      advance('name', [{ who: 'you', text: TRACK_SAID[track] }], 'Got it — I’ll guide you by voice. ')
+      advance('name', [{ who: 'you', text: TRACK_SAID[track] }], lineFor('name', 'Got it — I’ll guide you by voice. '))
     } else if (turn === 'name') {
       const name = nameFrom(heard)
       if (!name) return retry('I didn’t catch your name.', question)
       setProfile({ name })
-      advance('email', [{ who: 'you', text: name }], `${name}, ${spellOut(name)}. Nice to meet you, ${name}! `)
+      if (fixingOne.current) {
+        fixingOne.current = false
+        return advance('check', [{ who: 'you', text: name }], checkLine(name, profile.email))
+      }
+      advance('email', [{ who: 'you', text: name }], lineFor('email', `${name}, ${spellOut(name)}. Nice to meet you, ${name}! `))
     } else if (turn === 'email') {
       const email = emailFrom(heard)
       if (!email) return retry(`I heard “${heard}”, which isn’t an email.`, `${question} For example, “donna at u b c dot c a”.`)
-      // No email code yet: the server doesn't send real codes, so the account counts as ready here.
-      setProfile({ email, signedIn: true })
-      advance('camera', [{ who: 'you', text: email }], `Got it: ${spellEmail(email)}. Thanks! `)
+      fixingOne.current = false
+      setProfile({ email })
+      advance('check', [{ who: 'you', text: email }], checkLine(profile.name, email))
+    } else if (turn === 'check') {
+      const answer = yesNo(heard)
+      if (!answer) return retry(`I heard “${heard}”.`, 'Are your name and email right? Say “yes” or “no”.')
+      if (answer === 'yes') {
+        // No email code yet: the server doesn't send real codes, so the account counts as ready here.
+        setProfile({ signedIn: true })
+        return advance('camera', [{ who: 'you', text: 'Yes' }], lineFor('camera', 'Great, you’re signed up! '))
+      }
+      // "No": fix whichever one they named; if they didn't say, ask both again.
+      const t = heard.toLowerCase()
+      const email = /e-?mail/.test(t)
+      const name = /\bname\b/.test(t)
+      if (email && !name) {
+        fixingOne.current = true
+        return advance('email', [{ who: 'you', text: 'No' }], lineFor('email', 'Okay, let’s fix your email. '))
+      }
+      fixingOne.current = name && !email
+      advance('name', [{ who: 'you', text: 'No' }], lineFor('name', name && !email ? 'Okay, let’s fix your name. ' : 'Okay, let’s try again. '))
     }
   }
 
@@ -159,7 +199,7 @@ export function VoiceChat() {
   function tap() {
     if (turn === 'mic') return void allow('audio')
     if (turn === 'camera') return void allow('video')
-    if (turn !== 'how' && turn !== 'name' && turn !== 'email') return
+    if (turn !== 'how' && turn !== 'name' && turn !== 'email' && turn !== 'check') return
     if (phase === 'ask') return startRecording()
     if (phase !== 'record') return
     // Ignore the tail of the tap that started recording (a quick double-tap on "answer").
@@ -206,7 +246,7 @@ export function VoiceChat() {
   }, [turn, count, go])
 
   // ---- Layout -----------------------------------------------------------------------------------------
-  const answering = turn === 'how' || turn === 'name' || turn === 'email'
+  const answering = turn === 'how' || turn === 'name' || turn === 'email' || turn === 'check'
   const recording = answering && phase !== 'ask'
   return (
     // Fixed to the viewport height so the chat history scrolls instead of pushing the page past the screen.
